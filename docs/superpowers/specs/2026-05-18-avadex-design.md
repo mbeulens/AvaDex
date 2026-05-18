@@ -20,8 +20,10 @@ constrained by what Ava's current API can deliver.
 
 - Single-user CLI for personal daily use.
 - REPL-style agentic loop over Ava's `/api/v1/messages`.
-- Built-in tools: `read_file`, `write_file`, `edit_file`, `bash`, `web_search`,
-  `rag_search`.
+- Built-in tools: `read_file`, `write_file`, `edit_file`, `bash`.
+  (Web search and RAG access are deferred — see "Open questions for v2"; Ava
+  doesn't expose standalone endpoints for them today, and auto-RAG already
+  runs server-side on every `/api/v1/messages` call.)
 - MCP server support (stdio transport) for third-party tools.
 - Allowlist + interactive prompt for permissioned actions.
 - Long-lived token auth, set up once via `avadex login`.
@@ -215,7 +217,7 @@ Interactive prompt UI: `[y]es / [n]o / [a]lways`. On `a`, user picks a glob
 pattern; the rule is appended to allowlist.toml.
 
 ### `avadex/tools/builtin.py`
-Six tools, each a `(args: dict) -> ToolResult` function plus a JSON-schema:
+Four tools, each a `(args: dict) -> ToolResult` function plus a JSON-schema:
 
 | Name          | Behavior                                                          |
 |---------------|-------------------------------------------------------------------|
@@ -223,11 +225,11 @@ Six tools, each a `(args: dict) -> ToolResult` function plus a JSON-schema:
 | `write_file`  | Overwrite file. Creates parent dirs                               |
 | `edit_file`   | Exact old_string → new_string replacement; errors if not unique   |
 | `bash`        | `subprocess.run`, captures stdout+stderr, default 30s timeout     |
-| `web_search`  | POST to Ava's SearXNG-proxy endpoint; returns top-N results       |
-| `rag_search`  | POST to Ava's ChromaDB-proxy endpoint; returns docs + sources     |
 
 Tool names and schemas intentionally mirror Claude Code's so the model has
-prior familiarity.
+prior familiarity. `web_search` and `rag_search` are deferred — Ava has no
+standalone endpoints for them, and auto-RAG already fires on every
+`/api/v1/messages` request.
 
 ### `avadex/tools/mcp.py` — MCP integration
 Uses the official `mcp` Python SDK. On REPL startup, for each `[[mcp_servers]]`
@@ -363,6 +365,9 @@ Not blocking v1, but worth noting:
 - Ask Ana for streaming on `/api/v1/messages`.
 - Ask Ana for configurable `num_ctx` (the hardcoded 4096 will bite as soon as
   AvaDex starts editing real codebases).
+- Ask Ana for standalone `/api/search` (SearXNG proxy) and
+  `/api/rag/search` (ChromaDB query) endpoints so AvaDex can expose
+  `web_search` and `rag_search` tools.
 - Cross-session conversation resume (`avadex resume <id>`).
 - Slash command for explicit sub-agent dispatch.
 
