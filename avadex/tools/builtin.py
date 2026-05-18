@@ -276,4 +276,66 @@ WEB_FETCH = ToolDefinition(
 )
 
 
-ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH]
+def multi_edit_tool(args: dict) -> ToolResult:
+    path_str = args.get("path", "")
+    edits = args.get("edits", [])
+    if not path_str:
+        return ToolResult(content="missing 'path' argument", is_error=True)
+    if not edits or not isinstance(edits, list):
+        return ToolResult(content="'edits' must be a non-empty list of {old_string, new_string} objects", is_error=True)
+    p = Path(path_str)
+    if not p.exists():
+        return ToolResult(content=f"not found: {p}", is_error=True)
+
+    body = p.read_text()
+    # Validate-and-stage: apply each edit to a working copy. If any edit's
+    # old_string is missing or non-unique against the current working state,
+    # abort without writing the file.
+    for i, e in enumerate(edits, start=1):
+        if not isinstance(e, dict) or "old_string" not in e or "new_string" not in e:
+            return ToolResult(
+                content=f"edit {i}: must be {{old_string, new_string}} object",
+                is_error=True,
+            )
+        old = e["old_string"]
+        new = e["new_string"]
+        count = body.count(old)
+        if count == 0:
+            return ToolResult(content=f"edit {i}: old_string not found in {p}", is_error=True)
+        if count > 1:
+            return ToolResult(
+                content=f"edit {i}: old_string appears {count} times in {p} (must be unique); add more surrounding context",
+                is_error=True,
+            )
+        body = body.replace(old, new, 1)
+
+    p.write_text(body)
+    return ToolResult(content=f"applied {len(edits)} edits to {p}")
+
+
+MULTI_EDIT = ToolDefinition(
+    name="multi_edit",
+    description="Apply multiple {old_string, new_string} edits to one file atomically. Each old_string must appear exactly once in the working state at the moment its edit runs (edits run sequentially). If any edit fails to match, the file is not modified.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "edits": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["old_string", "new_string"],
+                },
+            },
+        },
+        "required": ["path", "edits"],
+    },
+    handler=multi_edit_tool,
+)
+
+
+ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH, MULTI_EDIT]
