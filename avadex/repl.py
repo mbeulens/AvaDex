@@ -115,11 +115,8 @@ class Repl:
         return False
 
     def _handle_model_command(self, arg: str):
-        if not arg:
-            self.renderer.info(f"current model: {self.agent.model}")
-            self.renderer.info("usage: /model list | /model <name> | /model refresh")
-            return
-        if arg in ("list", "refresh"):
+        # /model with no arg, /model list, /model refresh — show numbered list
+        if arg in ("", "list", "refresh"):
             try:
                 data = self.agent.client.list_models()
             except Exception as exc:
@@ -130,20 +127,36 @@ class Repl:
             if not models:
                 self.renderer.info("no models available")
                 return
-            self.renderer.info(f"default: {data.get('default') or '(none)'}")
-            for m in models:
+            self.renderer.info(f"current: {self.agent.model}   default: {data.get('default') or '(none)'}")
+            for i, m in enumerate(models, start=1):
                 marker = "*" if m["id"] == self.agent.model else " "
                 size = f"  {m.get('size', '')}" if m.get("size") else ""
-                self.renderer.info(f"  {marker} {m['id']}{size}")
+                self.renderer.info(f"  [{i}] {marker} {m['id']}{size}")
+            self.renderer.info("switch with /model <number> or /model <name>")
             return
-        # /model <name> — switch
+
+        # Ensure cache populated before number- or name-based switch
         if self._model_cache is None:
             try:
                 self._model_cache = self.agent.client.list_models()
             except Exception as exc:
                 self.renderer.error(f"could not fetch model list: {exc}")
                 return
-        ids = {m["id"] for m in self._model_cache.get("models", [])}
+        models = self._model_cache.get("models", [])
+
+        # /model <N> — pick by 1-based index from the cached list
+        if arg.isdigit():
+            idx = int(arg)
+            if 1 <= idx <= len(models):
+                picked = models[idx - 1]["id"]
+                self.agent.model = picked
+                self.renderer.info(f"model set to {picked}")
+            else:
+                self.renderer.error(f"no model at position {idx} (valid: 1..{len(models)})")
+            return
+
+        # /model <name> — pick by exact id match
+        ids = {m["id"] for m in models}
         if arg in ids:
             self.agent.model = arg
             self.renderer.info(f"model set to {arg}")

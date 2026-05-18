@@ -133,3 +133,34 @@ def test_model_unknown_shows_error_and_list(capsys):
     captured = capsys.readouterr()
     combined = captured.out + captured.err
     assert "nonexistent" in combined.lower() or "no such" in combined.lower()
+
+
+def test_model_pick_by_number_switches(capsys):
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model 2", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    # Position 2 in StubAgentWithModels' list is llama3.1:70b
+    assert agent.model == "llama3.1:70b"
+
+
+def test_model_pick_by_number_out_of_range(capsys):
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model 9", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert "position 9" in combined.lower() or "valid" in combined.lower()
+    # Did NOT switch
+    assert agent.model == "gemma4:26b"
+
+
+def test_model_list_shows_numbered_entries(capsys):
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model list", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    out = capsys.readouterr().out
+    assert "[1]" in out
+    assert "[2]" in out
