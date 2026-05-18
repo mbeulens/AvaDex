@@ -12,6 +12,10 @@ class AvaError(Exception):
     pass
 
 
+class ContextOverflow(AvaError):
+    pass
+
+
 class AvaClient:
     def __init__(self, base_url: str, token: str, timeout: float = 120.0):
         self.base_url = base_url.rstrip("/")
@@ -47,6 +51,9 @@ class AvaClient:
             raise TokenExpired("token rejected by Ava")
         if response.status_code >= 400:
             body = response.text[:500]
+            low = body.lower()
+            if "context" in low and ("length" in low or "too" in low or "exceed" in low):
+                raise ContextOverflow(f"HTTP {response.status_code}: {body}")
             raise AvaError(f"HTTP {response.status_code}: {body}")
         try:
             return parse_response(response.json())
