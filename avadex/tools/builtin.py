@@ -36,3 +36,69 @@ READ_FILE = ToolDefinition(
     },
     handler=read_file_tool,
 )
+
+
+def write_file_tool(args: dict) -> ToolResult:
+    path_str = args.get("path", "")
+    content = args.get("content")
+    if not path_str:
+        return ToolResult(content="missing 'path' argument", is_error=True)
+    if content is None:
+        return ToolResult(content="missing 'content' argument", is_error=True)
+    p = Path(path_str)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content)
+    return ToolResult(content=f"wrote {len(content)} chars to {p}")
+
+
+WRITE_FILE = ToolDefinition(
+    name="write_file",
+    description="Create or overwrite a file. Creates parent directories. Returns the byte count written.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "content": {"type": "string"},
+        },
+        "required": ["path", "content"],
+    },
+    handler=write_file_tool,
+)
+
+
+def edit_file_tool(args: dict) -> ToolResult:
+    path_str = args.get("path", "")
+    old = args.get("old_string", "")
+    new = args.get("new_string", "")
+    if not path_str:
+        return ToolResult(content="missing 'path' argument", is_error=True)
+    p = Path(path_str)
+    if not p.exists():
+        return ToolResult(content=f"not found: {p}", is_error=True)
+    body = p.read_text()
+    count = body.count(old)
+    if count == 0:
+        return ToolResult(content=f"old_string not found in {p}", is_error=True)
+    if count > 1:
+        return ToolResult(
+            content=f"old_string is not unique: appears {count} times in {p}; provide more surrounding context",
+            is_error=True,
+        )
+    p.write_text(body.replace(old, new, 1))
+    return ToolResult(content=f"edited {p}")
+
+
+EDIT_FILE = ToolDefinition(
+    name="edit_file",
+    description="Replace exactly one occurrence of old_string with new_string in a file. Errors if old_string is missing or appears more than once.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "old_string": {"type": "string"},
+            "new_string": {"type": "string"},
+        },
+        "required": ["path", "old_string", "new_string"],
+    },
+    handler=edit_file_tool,
+)
