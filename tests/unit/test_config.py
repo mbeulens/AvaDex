@@ -33,7 +33,8 @@ def test_load_uses_defaults_for_unset(tmp_path):
     p = tmp_path / "min.toml"
     p.write_text('ava_url = "u"\nava_token = "t"\n')
     cfg = load_config(p)
-    assert cfg.default_model == "gemma4"
+    # default_model = "" means "ask Ava on startup"; cli.run_repl resolves it.
+    assert cfg.default_model == ""
     assert cfg.max_context_tokens == 3500
     assert cfg.mcp_servers == []
 

@@ -18,7 +18,7 @@ class ConfigMissing(Exception):
 class Config:
     ava_url: str
     ava_token: str
-    default_model: str = "gemma4"
+    default_model: str = ""  # empty = resolve from Ava's /api/v1/models on startup
     max_context_tokens: int = 3500
     system_prompt_path: str = ""
     mcp_servers: list[dict] = field(default_factory=list)
@@ -34,7 +34,7 @@ def load_config(path: Path) -> Config:
         return Config(
             ava_url=data["ava_url"],
             ava_token=data["ava_token"],
-            default_model=data.get("default_model", "gemma4"),
+            default_model=data.get("default_model", ""),
             max_context_tokens=data.get("max_context_tokens", 3500),
             system_prompt_path=data.get("system_prompt_path", ""),
             mcp_servers=list(data.get("mcp_servers", [])),

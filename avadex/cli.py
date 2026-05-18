@@ -5,7 +5,7 @@ from getpass import getpass
 from pathlib import Path
 
 from avadex.config import save_token, load_config, ConfigMissing
-from avadex.ava_client import AvaClient
+from avadex.ava_client import AvaClient, AvaError, TokenExpired
 from avadex.permissions import PermissionManager
 from avadex.tools.registry import ToolRegistry
 from avadex.tools.builtin import ALL_BUILTINS
@@ -16,6 +16,31 @@ from avadex.repl import Repl, build_terminal_prompter
 
 DEFAULT_CONFIG = Path.home() / ".config" / "avadex" / "config.toml"
 DEFAULT_ALLOWLIST = Path.home() / ".config" / "avadex" / "allowlist.toml"
+
+
+FALLBACK_MODEL = "gemma4"
+
+
+def _resolve_initial_model(cfg, client) -> str:
+    """Pick the model to start the REPL with.
+
+    Resolution order:
+      1. cfg.default_model if explicitly set in config.toml (user override)
+      2. The `default` field from Ava's GET /api/v1/models
+      3. FALLBACK_MODEL as last resort, with a warning to stderr
+    """
+    if cfg.default_model:
+        return cfg.default_model
+    try:
+        info = client.list_models()
+    except (AvaError, TokenExpired, Exception) as exc:
+        print(
+            f"[warn] could not fetch Ava's default model ({exc}); "
+            f"using fallback '{FALLBACK_MODEL}'",
+            file=sys.stderr,
+        )
+        return FALLBACK_MODEL
+    return info.get("default") or FALLBACK_MODEL
 
 
 def _build_system_prompt(cfg) -> str:
@@ -58,11 +83,12 @@ def run_repl(
     register_mcp_tools(mcp_clients, registry)
 
     permissions = PermissionManager(allowlist_path)
+    initial_model = _resolve_initial_model(cfg, client)
     agent = AgentLoop(
         client=client, registry=registry, permissions=permissions,
         system_prompt=_build_system_prompt(cfg),
         max_context_tokens=cfg.max_context_tokens,
-        model=cfg.default_model,
+        model=initial_model,
         prompt_user=build_terminal_prompter(),
     )
     # Expose registry + permissions on agent for /tools and /allow slash commands
