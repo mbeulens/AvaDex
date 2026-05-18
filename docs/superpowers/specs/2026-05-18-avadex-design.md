@@ -125,10 +125,10 @@ system_prompt_path = ""    # optional; defaults to bundled prompt
 name = "filesystem"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/beuner"]
-
-[bash]
-default_timeout = 30  # seconds
 ```
+
+(Per-call `bash` timeout lives inside the tool itself, default 30s; not in
+config.)
 
 Loaded once at startup. No hot reload in v1.
 
@@ -158,8 +158,8 @@ raise `AvaError` with status + body excerpt. No automatic retries.
   - `/exit` — quit
   - `/clear` — wipe conversation history
   - `/tools` — list available tools (built-in + MCP)
-  - `/allow <pattern>` — add a permission allowlist rule manually
-  - `/cost` — estimated tokens this session
+  - `/allow <tool> <pattern>` — add a permission allowlist rule manually
+  - (No `/cost` in v1 — Ava returns zero in the `usage` field today.)
 
 ### `avadex/agent_loop.py` — the core
 Owns the conversation list and runs turns.
