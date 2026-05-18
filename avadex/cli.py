@@ -6,10 +6,81 @@ from pathlib import Path
 
 import httpx
 
-from avadex.config import save_token
+from avadex.config import save_token, load_config, ConfigMissing
+from avadex.ava_client import AvaClient
+from avadex.permissions import PermissionManager
+from avadex.tools.registry import ToolRegistry
+from avadex.tools.builtin import ALL_BUILTINS
+from avadex.tools.mcp import MCPClient, register_mcp_tools
+from avadex.agent_loop import AgentLoop
+from avadex.repl import Repl, build_terminal_prompter
 
 
 DEFAULT_CONFIG = Path.home() / ".config" / "avadex" / "config.toml"
+DEFAULT_ALLOWLIST = Path.home() / ".config" / "avadex" / "allowlist.toml"
+
+
+def _build_system_prompt(cfg) -> str:
+    if cfg.system_prompt_path:
+        try:
+            return Path(cfg.system_prompt_path).read_text()
+        except FileNotFoundError:
+            pass
+    return (
+        "You are AvaDex, a local CLI agent. You have tools to read, write, "
+        "and edit files, run shell commands, and call MCP-provided tools. "
+        "Be concise. When a tool fails, read the error and adapt."
+    )
+
+
+def run_repl(
+    config_path: Path = DEFAULT_CONFIG,
+    allowlist_path: Path = DEFAULT_ALLOWLIST,
+    input_fn=None,
+) -> int:
+    try:
+        cfg = load_config(config_path)
+    except ConfigMissing as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    client = AvaClient(cfg.ava_url, cfg.ava_token)
+    registry = ToolRegistry()
+    for tool in ALL_BUILTINS:
+        registry.register(tool)
+
+    mcp_clients = []
+    for entry in cfg.mcp_servers:
+        mc = MCPClient(name=entry["name"], command=entry["command"], args=entry.get("args", []))
+        try:
+            mc.start()
+            mcp_clients.append(mc)
+        except Exception as exc:
+            print(f"[warn] MCP server '{entry['name']}' failed to start: {exc}", file=sys.stderr)
+    register_mcp_tools(mcp_clients, registry)
+
+    permissions = PermissionManager(allowlist_path)
+    agent = AgentLoop(
+        client=client, registry=registry, permissions=permissions,
+        system_prompt=_build_system_prompt(cfg),
+        max_context_tokens=cfg.max_context_tokens,
+        model=cfg.default_model,
+        prompt_user=build_terminal_prompter(),
+    )
+    # Expose registry + permissions on agent for /tools and /allow slash commands
+    agent.registry = registry
+    agent.permissions = permissions
+    repl = Repl(agent=agent, input_fn=input_fn)
+    try:
+        repl.run()
+        return 0
+    finally:
+        for mc in mcp_clients:
+            try:
+                mc.stop()
+            except Exception:
+                pass
+        client.close()
 
 
 def login_command(
@@ -49,9 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.cmd == "login":
         return login_command(config_path=args.config)
-    # Default to REPL — wired in Task 18
-    print("REPL not yet wired in this task.")
-    return 0
+    # Default: REPL
+    return run_repl(config_path=args.config)
 
 
 if __name__ == "__main__":
