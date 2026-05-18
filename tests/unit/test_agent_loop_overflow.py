@@ -2,7 +2,7 @@ from avadex.renderer import RecordingRenderer
 from avadex.tools.registry import ToolRegistry
 from avadex.permissions import PermissionManager
 from avadex.agent_loop import AgentLoop
-from avadex.ava_client import AvaError, ContextOverflow
+from avadex.ava_client import AvaError, ContextOverflow, TokenExpired
 from avadex.types import AvaResponse, TextBlock
 
 
@@ -54,3 +54,35 @@ def test_persistent_overflow_aborts(tmp_path):
     renderer = RecordingRenderer()
     loop.run_turn("hi", renderer)
     assert any(e[0] == "error" and "context" in e[1].lower() for e in renderer.events)
+
+
+class FailingClient:
+    """Raises a given exception on every call."""
+    def __init__(self, exc):
+        self.exc = exc
+    def messages(self, system, messages, tools, max_tokens=2048, model="gemma4"):
+        raise self.exc
+
+
+def test_ava_error_renders_error_and_returns(tmp_path):
+    client = FailingClient(AvaError("HTTP 500: boom"))
+    loop = AgentLoop(
+        client=client, registry=ToolRegistry(),
+        permissions=PermissionManager(tmp_path / "allow.toml"),
+        system_prompt="", max_context_tokens=100000,
+    )
+    renderer = RecordingRenderer()
+    loop.run_turn("hi", renderer)
+    assert any(e[0] == "error" and "500" in e[1] for e in renderer.events)
+
+
+def test_token_expired_renders_login_prompt(tmp_path):
+    client = FailingClient(TokenExpired("token rejected"))
+    loop = AgentLoop(
+        client=client, registry=ToolRegistry(),
+        permissions=PermissionManager(tmp_path / "allow.toml"),
+        system_prompt="", max_context_tokens=100000,
+    )
+    renderer = RecordingRenderer()
+    loop.run_turn("hi", renderer)
+    assert any(e[0] == "error" and "login" in e[1].lower() for e in renderer.events)
