@@ -5,6 +5,7 @@ import glob as _glob
 import re as _re
 
 from avadex.tools.registry import ToolDefinition, ToolResult
+from avadex.tools.todos import TODO_WRITE, TODO_READ
 
 MAX_READ_BYTES = 1 * 1024 * 1024  # 1 MB
 
@@ -338,4 +339,4 @@ MULTI_EDIT = ToolDefinition(
 )
 
 
-ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH, MULTI_EDIT]
+ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH, MULTI_EDIT, TODO_WRITE, TODO_READ]
