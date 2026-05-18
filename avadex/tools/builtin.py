@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import subprocess
+import glob as _glob
 
 from avadex.tools.registry import ToolDefinition, ToolResult
 
@@ -152,4 +153,37 @@ BASH = ToolDefinition(
 )
 
 
-ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH]
+def glob_tool(args: dict) -> ToolResult:
+    pattern = args.get("pattern", "")
+    if not pattern:
+        return ToolResult(content="missing 'pattern' argument", is_error=True)
+    base = args.get("base", ".")
+    base_p = Path(base)
+    if not base_p.exists():
+        return ToolResult(content=f"base not found: {base_p}", is_error=True)
+    matches = sorted(_glob.glob(str(base_p / pattern), recursive=True))
+    if not matches:
+        return ToolResult(content="(no matches)")
+    if len(matches) > 200:
+        return ToolResult(
+            content=f"{len(matches)} matches (showing first 200):\n" + "\n".join(matches[:200])
+        )
+    return ToolResult(content="\n".join(matches))
+
+
+GLOB = ToolDefinition(
+    name="glob",
+    description="Find files matching a glob pattern (** supported for recursion). Returns paths sorted, capped at 200 results.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Glob pattern, e.g. '**/*.py' or 'src/**/test_*.py'"},
+            "base": {"type": "string", "description": "Base directory (default: current)"},
+        },
+        "required": ["pattern"],
+    },
+    handler=glob_tool,
+)
+
+
+ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB]
