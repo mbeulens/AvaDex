@@ -20,7 +20,7 @@ class ToolUseBlock:
 @dataclass
 class ToolResultBlock:
     tool_use_id: str
-    content: str
+    content: str | list
     is_error: bool = False
     type: str = "tool_result"
 

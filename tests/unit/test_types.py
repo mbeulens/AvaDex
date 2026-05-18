@@ -1,7 +1,7 @@
 import pytest
 from avadex.types import (
-    TextBlock, ToolUseBlock, AvaResponse,
-    parse_response, iter_tool_use_blocks,
+    TextBlock, ToolUseBlock, ToolResultBlock, AvaResponse,
+    parse_response, iter_tool_use_blocks, parse_block, block_to_dict,
 )
 
 
@@ -52,3 +52,24 @@ def test_parse_unknown_block_type_raises():
     }
     with pytest.raises(ValueError, match="unknown block type"):
         parse_response(raw)
+
+
+def test_block_to_dict_text_roundtrip():
+    raw = {"type": "text", "text": "hi"}
+    assert block_to_dict(parse_block(raw)) == raw
+
+
+def test_block_to_dict_tool_use_roundtrip():
+    raw = {"type": "tool_use", "id": "tu1", "name": "bash", "input": {"command": "ls"}}
+    assert block_to_dict(parse_block(raw)) == raw
+
+
+def test_block_to_dict_tool_result_omits_is_error_when_false():
+    raw_in = {"type": "tool_result", "tool_use_id": "tu1", "content": "ok"}
+    # parse and serialize back; is_error must be omitted when False
+    assert block_to_dict(parse_block(raw_in)) == raw_in
+
+
+def test_block_to_dict_tool_result_includes_is_error_when_true():
+    raw_in = {"type": "tool_result", "tool_use_id": "tu1", "content": "fail", "is_error": True}
+    assert block_to_dict(parse_block(raw_in)) == raw_in
