@@ -30,14 +30,19 @@ def load_config(path: Path) -> Config:
         raise ConfigMissing(f"no config at {p}; run 'avadex login'")
     with open(p, "rb") as f:
         data = _tomli.load(f)
-    return Config(
-        ava_url=data["ava_url"],
-        ava_token=data["ava_token"],
-        default_model=data.get("default_model", "gemma4"),
-        max_context_tokens=data.get("max_context_tokens", 3500),
-        system_prompt_path=data.get("system_prompt_path", ""),
-        mcp_servers=list(data.get("mcp_servers", [])),
-    )
+    try:
+        return Config(
+            ava_url=data["ava_url"],
+            ava_token=data["ava_token"],
+            default_model=data.get("default_model", "gemma4"),
+            max_context_tokens=data.get("max_context_tokens", 3500),
+            system_prompt_path=data.get("system_prompt_path", ""),
+            mcp_servers=list(data.get("mcp_servers", [])),
+        )
+    except KeyError as exc:
+        raise ConfigMissing(
+            f"config at {p} is missing required field {exc.args[0]!r}; run 'avadex login'"
+        ) from exc
 
 
 def save_token(path: Path, url: str, token: str) -> None:

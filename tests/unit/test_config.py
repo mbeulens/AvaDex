@@ -46,6 +46,13 @@ def test_save_token_writes_minimal_config(tmp_path):
     assert cfg.ava_token == "tkn"
 
 
+def test_load_missing_required_field_raises_config_missing(tmp_path):
+    p = tmp_path / "incomplete.toml"
+    p.write_text('ava_url = "https://x.test"\n')  # missing ava_token
+    with pytest.raises(ConfigMissing, match="ava_token"):
+        load_config(p)
+
+
 def test_save_token_preserves_other_fields(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text('''
