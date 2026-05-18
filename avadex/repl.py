@@ -1,34 +1,68 @@
 from __future__ import annotations
+import os
 import sys
 from typing import Callable, Optional
 
 from avadex.tools.registry import ToolResult
 
 
+_ANSI = {
+    "reset": "\033[0m",
+    "bold": "\033[1m",
+    "dim": "\033[2m",
+    "red": "\033[31m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "cyan": "\033[36m",
+    "bright_red": "\033[91m",
+    "bright_green": "\033[92m",
+}
+
+
+def _color_enabled() -> bool:
+    """Respect NO_COLOR (https://no-color.org) and only colorize TTYs."""
+    if os.environ.get("NO_COLOR", ""):
+        return False
+    return sys.stdout.isatty()
+
+
+def _c(text: str, *codes: str) -> str:
+    if not _color_enabled():
+        return text
+    prefix = "".join(_ANSI[c] for c in codes)
+    return f"{prefix}{text}{_ANSI['reset']}"
+
+
 class AnsiRenderer:
-    """Bare-ANSI renderer used by the REPL. Keeps stdout clean (one
-    line per event) so it's easy to test with capsys."""
+    """ANSI-colored renderer used by the REPL. Colors auto-disable when stdout
+    isn't a TTY or NO_COLOR is set, so tests and piped output stay plain."""
     BULLET = "●"
 
     def assistant_text(self, text: str):
+        # Leave Ava's prose uncolored — the model may use markdown, code
+        # fences, etc., and mid-message ANSI would clash with all of that.
         print(text)
 
     def tool_call(self, name: str, args: dict):
         summary = ", ".join(f"{k}={self._brief(v)}" for k, v in args.items())
-        print(f"{self.BULLET} {name}({summary})")
+        print(
+            f"{_c(self.BULLET, 'cyan')} "
+            f"{_c(name, 'bold', 'cyan')}"
+            f"({_c(summary, 'dim')})"
+        )
 
     def tool_result(self, name: str, result: ToolResult):
         if result.is_error:
-            print(f"  ✗ {result.content}")
+            print(_c(f"  ✗ {result.content}", "red"))
         else:
             preview = result.content.splitlines()[0][:80] if result.content else "(empty)"
-            print(f"  → {preview}")
+            print(f"  {_c('→', 'green')} {preview}")
 
     def info(self, text: str):
-        print(f"[info] {text}")
+        print(f"{_c('[info]', 'dim')} {text}")
 
     def error(self, text: str):
-        print(f"[error] {text}", file=sys.stderr)
+        print(f"{_c('[error]', 'bright_red')} {_c(text, 'red')}", file=sys.stderr)
 
     @staticmethod
     def _brief(v):
@@ -55,24 +89,23 @@ class Repl:
             agent.prompt_user = prompt_user
 
     def _print_welcome(self) -> None:
-        import os
         import avadex
         model = getattr(self.agent, "model", "(unknown)")
         cwd = os.getcwd()
         banner = (
             "\n"
-            "     /\\\n"
-            f"    /  \\      AvaDex {avadex.__version__}\n"
-            "   / /\\ \\    local CLI agent · powered by Ava\n"
-            "  /_/  \\_\\\n"
+            f"     {_c('/\\', 'cyan')}\n"
+            f"    {_c('/  \\', 'cyan')}      {_c(f'AvaDex {avadex.__version__}', 'bold', 'cyan')}\n"
+            f"   {_c('/ /\\ \\', 'cyan')}    {_c('local CLI agent · powered by Ava', 'dim')}\n"
+            f"  {_c('/_/  \\_\\', 'cyan')}\n"
             "\n"
-            f"  cwd    : {cwd}\n"
-            f"  model  : {model}\n"
+            f"  {_c('cwd', 'dim')}    : {cwd}\n"
+            f"  {_c('model', 'dim')}  : {_c(model, 'cyan')}\n"
             "\n"
-            "  /model        show models — then type the number to pick (or /model <name>)\n"
-            "  /tools        list tools the agent can call\n"
-            "  /clear        reset conversation\n"
-            "  /exit         quit\n"
+            f"  {_c('/model', 'cyan')}        show models — then type the number to pick (or /model <name>)\n"
+            f"  {_c('/tools', 'cyan')}        list tools the agent can call\n"
+            f"  {_c('/clear', 'cyan')}        reset conversation\n"
+            f"  {_c('/exit', 'cyan')}         quit\n"
         )
         print(banner)
 
