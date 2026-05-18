@@ -22,6 +22,7 @@ class AgentLoop:
         max_context_tokens: int = 3500,
         max_response_tokens: int = 2048,
         model: str = "gemma4",
+        prompt_user=None,
     ):
         self.client = client
         self.registry = registry
@@ -31,6 +32,7 @@ class AgentLoop:
         self.max_response_tokens = max_response_tokens
         self.model = model
         self.messages: list[dict] = []
+        self.prompt_user = prompt_user or (lambda tool, args: ("deny", None))
 
     def clear(self):
         self.messages = []
@@ -72,5 +74,31 @@ class AgentLoop:
         renderer.error("max iterations reached without end_turn")
 
     def _execute_tools(self, content: list, renderer: Renderer) -> list[dict]:
-        # Stub — replaced in Task 11.
-        return []
+        from avadex.permissions import Decision, Rule
+        results: list[dict] = []
+        for block in iter_tool_use_blocks(content):
+            renderer.tool_call(block.name, block.input)
+            decision = self.permissions.check(block.name, block.input)
+            if decision == Decision.PROMPT:
+                answer, pattern = self.prompt_user(block.name, block.input)
+                if answer == "yes":
+                    decision = Decision.AUTO_ALLOW
+                elif answer == "always":
+                    self.permissions.add_rule(Rule(tool=block.name, pattern=pattern or "*"))
+                    decision = Decision.AUTO_ALLOW
+                else:
+                    decision = Decision.AUTO_DENY
+
+            if decision == Decision.AUTO_DENY:
+                result = ToolResult(content="denied by user", is_error=True)
+            else:
+                result = self.registry.dispatch(block.name, block.input)
+
+            renderer.tool_result(block.name, result)
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": result.content,
+                "is_error": result.is_error,
+            })
+        return results
