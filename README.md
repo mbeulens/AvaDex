@@ -40,6 +40,29 @@ AvaDex will call tools (file reads, edits, shell) and prompt before any
 write or shell command unless the action matches your allowlist
 (`~/.config/avadex/allowlist.toml`).
 
+## Tools
+
+Built-in (always available):
+
+| Tool          | Purpose                                                          |
+|---------------|------------------------------------------------------------------|
+| `read_file`   | Read a UTF-8 text file (1 MB cap).                               |
+| `write_file`  | Create or overwrite a file. Creates parent dirs.                 |
+| `edit_file`   | Replace one exact occurrence of `old_string` with `new_string`.  |
+| `multi_edit`  | Apply several edits to one file atomically.                      |
+| `glob`        | Find files matching a glob pattern (`**` for recursion).         |
+| `grep_files`  | Search file contents with a Python regex.                        |
+| `bash`        | Run a shell command. Default 30s timeout, max 600s.              |
+| `bash_bg`     | Start a long-running shell job; returns a `job_id`.              |
+| `bash_output` | Read accumulated output + status of a background job.            |
+| `kill_bash`   | Terminate a background job (SIGTERM → SIGKILL after 5s).         |
+| `bash_list`   | List all background jobs.                                        |
+| `web_fetch`   | GET a URL, return body (up to 100 KB, follows redirects).        |
+| `todo_write`  | Replace the session todo list (for multi-step planning).         |
+| `todo_read`   | Read the current todo list.                                      |
+
+Plus any tools from MCP servers you've configured (namespaced as `<server>.<tool>`).
+
 ## Slash commands
 
 - `/exit` — quit
@@ -98,6 +121,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
+```
+
+Run with `--debug` to also write verbose logs to `~/.local/state/avadex/debug.log`
+(rotating, 1 MB × 5 files):
+
+```bash
+avadex --debug
 ```
 
 ## License
