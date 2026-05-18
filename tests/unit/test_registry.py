@@ -50,3 +50,42 @@ def test_dispatch_handler_exception_becomes_tool_error():
     result = reg.dispatch("boom", {})
     assert result.is_error
     assert "kapow" in result.content
+
+
+def test_unavailable_tool_filtered_from_schemas():
+    reg = ToolRegistry()
+    healthy = [True]
+    reg.register(ToolDefinition(
+        name="a", description="", input_schema={"type": "object"},
+        handler=lambda _: ToolResult(content=""),
+        is_available=lambda: healthy[0],
+    ))
+    assert len(reg.schemas()) == 1
+    healthy[0] = False
+    assert len(reg.schemas()) == 0
+
+
+def test_unavailable_tool_dispatch_returns_error():
+    reg = ToolRegistry()
+    reg.register(ToolDefinition(
+        name="a", description="", input_schema={},
+        handler=lambda _: ToolResult(content="ran"),
+        is_available=lambda: False,
+    ))
+    result = reg.dispatch("a", {})
+    assert result.is_error
+    assert "unavailable" in result.content.lower()
+
+
+def test_unavailable_tool_filtered_from_names():
+    reg = ToolRegistry()
+    reg.register(ToolDefinition(
+        name="visible", description="", input_schema={}, handler=lambda _: ToolResult(content=""),
+    ))
+    reg.register(ToolDefinition(
+        name="hidden", description="", input_schema={}, handler=lambda _: ToolResult(content=""),
+        is_available=lambda: False,
+    ))
+    names = reg.names()
+    assert "visible" in names
+    assert "hidden" not in names

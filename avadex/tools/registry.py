@@ -15,6 +15,7 @@ class ToolDefinition:
     description: str
     input_schema: dict
     handler: Callable[[dict], ToolResult]
+    is_available: Callable[[], bool] = lambda: True
 
 
 class ToolRegistry:
@@ -28,15 +29,18 @@ class ToolRegistry:
         return [
             {"name": t.name, "description": t.description, "input_schema": t.input_schema}
             for t in self._tools.values()
+            if t.is_available()
         ]
 
     def names(self) -> list[str]:
-        return list(self._tools.keys())
+        return [name for name, t in self._tools.items() if t.is_available()]
 
     def dispatch(self, name: str, args: dict) -> ToolResult:
         tool = self._tools.get(name)
         if tool is None:
             return ToolResult(content=f"unknown tool: {name}", is_error=True)
+        if not tool.is_available():
+            return ToolResult(content=f"tool '{name}' is currently unavailable", is_error=True)
         try:
             return tool.handler(args)
         except Exception as exc:

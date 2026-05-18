@@ -16,6 +16,7 @@ class MCPClient:
         self.name = name
         self.command = command
         self.args = args
+        self.is_healthy: bool = True
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._session = None  # mcp.ClientSession
@@ -77,7 +78,20 @@ class MCPClient:
         try:
             return fut.result(timeout=120)
         except Exception as exc:
-            return ToolResult(content=f"MCP call failed: {exc}", is_error=True)
+            # Flip unhealthy on the first failure and warn the user once.
+            was_healthy = self.is_healthy
+            self.is_healthy = False
+            if was_healthy:
+                import sys
+                print(
+                    f"[warn] MCP server '{self.name}' crashed — disabling its tools "
+                    f"for the rest of this session ({type(exc).__name__}: {exc})",
+                    file=sys.stderr,
+                )
+            return ToolResult(
+                content=f"MCP server '{self.name}' is unavailable (crashed: {exc})",
+                is_error=True,
+            )
 
     def stop(self):
         if not self._loop:
@@ -118,4 +132,5 @@ def register_mcp_tools(clients: list, registry: ToolRegistry) -> None:
                 description=tool["description"],
                 input_schema=tool["input_schema"],
                 handler=handler,
+                is_available=lambda _c=client: _c.is_healthy,
             ))
