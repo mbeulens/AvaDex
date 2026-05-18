@@ -70,6 +70,16 @@ class AnsiRenderer:
         return s if len(s) <= 60 else s[:57] + "..."
 
 
+def _strip_trailing_semicolon(text: str) -> str:
+    """If text (after rstrip) ends with ';', remove that semicolon and any
+    whitespace it might have collected. Used by the REPL's Enter-submit
+    shortcut so the ';' is never part of the submitted prompt."""
+    stripped = text.rstrip()
+    if stripped.endswith(";"):
+        return stripped[:-1].rstrip()
+    return stripped
+
+
 class Repl:
     PROMPT = "Ava> "
 
@@ -113,11 +123,41 @@ class Repl:
     def _default_input(prompt: str) -> str:
         from prompt_toolkit import PromptSession
         from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.key_binding import KeyBindings
         from pathlib import Path
+
         hist_path = Path.home() / ".local/state/avadex/history"
         hist_path.parent.mkdir(parents=True, exist_ok=True)
-        session = PromptSession(history=FileHistory(str(hist_path)))
-        return session.prompt(prompt, multiline=False)
+
+        bindings = KeyBindings()
+
+        @bindings.add("enter")
+        def _(event):
+            """Plain Enter: submit if the line ends with ';' (after stripping
+            trailing whitespace), otherwise insert a newline."""
+            buf = event.current_buffer
+            text = buf.text
+            # Trailing semicolon shortcut: submit
+            if text.rstrip().endswith(";"):
+                buf.text = _strip_trailing_semicolon(text)
+                buf.cursor_position = len(buf.text)
+                buf.validate_and_handle()
+            else:
+                buf.insert_text("\n")
+
+        # Esc-Enter as the alternative submit (prompt_toolkit's standard
+        # multiline submit chord — explicit here for clarity).
+        @bindings.add("escape", "enter")
+        def _(event):
+            event.current_buffer.validate_and_handle()
+
+        session = PromptSession(
+            history=FileHistory(str(hist_path)),
+            multiline=True,
+            prompt_continuation=lambda width, line_number, is_soft_wrap: "... ".rjust(width),
+            key_bindings=bindings,
+        )
+        return session.prompt(prompt)
 
     def run(self):
         self._print_welcome()
