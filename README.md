@@ -64,6 +64,21 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/you"]
 ```
 
+## Security
+
+**AvaDex runs all tools — including `bash`, `bash_bg`, `write_file`,
+and `edit_file` — with your user's full privileges. There is no
+sandbox.** The allowlist prompts before each risky action, but once
+you accept a pattern (or pick `[a]lways`), matching commands run
+unrestricted: they can read, modify, or delete any file your user can
+touch, talk to any network endpoint your machine can reach, and start
+long-running processes.
+
+Treat this like an interactive shell: don't paste prompts from
+untrusted sources, be deliberate about what you add to
+`~/.config/avadex/allowlist.toml`, and review the proposed action in
+each `[y/n/a]` prompt before pressing `y`.
+
 ## Known limitations (v1)
 
 - Ava's `/api/v1/messages` is non-streaming — each turn shows a "..."
