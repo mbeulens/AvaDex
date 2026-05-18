@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import subprocess
 
 from avadex.tools.registry import ToolDefinition, ToolResult
 
@@ -102,3 +103,53 @@ EDIT_FILE = ToolDefinition(
     },
     handler=edit_file_tool,
 )
+
+
+DEFAULT_BASH_TIMEOUT = 30
+
+
+def bash_tool(args: dict) -> ToolResult:
+    cmd = args.get("command", "")
+    if not cmd:
+        return ToolResult(content="missing 'command' argument", is_error=True)
+    timeout = int(args.get("timeout", DEFAULT_BASH_TIMEOUT))
+    try:
+        proc = subprocess.run(
+            cmd,
+            shell=True,
+            executable="/bin/bash",
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        partial = (exc.stdout or "") + (exc.stderr or "")
+        return ToolResult(
+            content=f"timed out after {timeout}s\n--- partial output ---\n{partial}",
+            is_error=True,
+        )
+    combined = proc.stdout + proc.stderr
+    if proc.returncode != 0:
+        return ToolResult(
+            content=f"exit code {proc.returncode}\n{combined}",
+            is_error=True,
+        )
+    return ToolResult(content=combined or "(no output)")
+
+
+BASH = ToolDefinition(
+    name="bash",
+    description="Run a shell command via /bin/bash. Captures stdout+stderr. Default 30s timeout.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "command": {"type": "string"},
+            "timeout": {"type": "integer", "description": "Override timeout in seconds (max 600)."},
+        },
+        "required": ["command"],
+    },
+    handler=bash_tool,
+)
+
+
+ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH]
