@@ -4,8 +4,6 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
-import httpx
-
 from avadex.config import save_token, load_config, ConfigMissing
 from avadex.ava_client import AvaClient
 from avadex.permissions import PermissionManager
@@ -83,30 +81,31 @@ def run_repl(
         client.close()
 
 
-def login_command(
+def set_key_command(
     input_fn=input,
     password_fn=getpass,
     config_path: Path = DEFAULT_CONFIG,
 ) -> int:
     url = input_fn("Ava URL (e.g. https://ava.example.com): ").strip().rstrip("/")
-    username = input_fn("Username: ").strip()
-    password = password_fn("Password: ")
-    try:
-        r = httpx.post(f"{url}/login", json={"username": username, "password": password}, timeout=30)
-    except httpx.RequestError as exc:
-        print(f"network error: {exc}", file=sys.stderr)
-        return 2
-    if r.status_code != 200:
-        print(f"login failed: HTTP {r.status_code}", file=sys.stderr)
+    if not url:
+        print("URL is required", file=sys.stderr)
         return 1
-    data = r.json()
-    token = data.get("token")
-    if not data.get("ok") or not token:
-        print(f"login failed: {data}", file=sys.stderr)
+    key = password_fn("Ava API key (AVA_SYNTEC_API_KEY): ").strip()
+    if not key:
+        print("API key is required", file=sys.stderr)
         return 1
-    save_token(config_path, url, token)
-    print(f"logged in. config saved to {config_path}")
+    save_token(config_path, url, key)
+    print(f"saved {config_path}")
     return 0
+
+
+def login_redirect_command() -> int:
+    print(
+        "'avadex login' is no longer supported — Ava's API uses a static "
+        "API key, not session login. Use 'avadex set-key' instead.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,12 +113,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--debug", action="store_true")
     sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("login")
-    sub.add_parser("repl")  # also the default
+    sub.add_parser("set-key")
+    sub.add_parser("login")   # legacy alias → redirect
+    sub.add_parser("repl")    # also the default
 
     args = parser.parse_args(argv)
+    if args.cmd == "set-key":
+        return set_key_command(config_path=args.config)
     if args.cmd == "login":
-        return login_command(config_path=args.config)
+        return login_redirect_command()
     # Default: REPL
     return run_repl(config_path=args.config)
 

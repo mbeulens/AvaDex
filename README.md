@@ -11,10 +11,15 @@ pipx install .
 ## First-time setup
 
 ```bash
-avadex login
-# Enter your Ava URL (e.g. https://ava.example.com), username, and password.
-# Saves a session token to ~/.config/avadex/config.toml
+avadex set-key
+# Enter your Ava URL (e.g. https://ava.example.com) and the value of
+# AVA_SYNTEC_API_KEY from the Ava server's environment.
+# Saves both to ~/.config/avadex/config.toml
 ```
+
+The API key is the value of `AVA_SYNTEC_API_KEY` on the Ava server. Find it with
+`systemctl show ava | grep AVA_SYNTEC_API_KEY` or check the systemd unit /
+`.env` file. If unset, the default is `"syntec-ava-local"`.
 
 ## Run
 
