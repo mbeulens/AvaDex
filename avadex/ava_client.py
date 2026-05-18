@@ -60,5 +60,28 @@ class AvaClient:
         except (ValueError, KeyError) as exc:
             raise AvaError(f"malformed response: {exc}") from exc
 
+    def list_models(self) -> dict:
+        """GET /api/v1/models. Returns {"models": [...], "default": str}.
+
+        Raises TokenExpired on 401, AvaError on other HTTP failures or network errors.
+        """
+        try:
+            response = self._client.get(f"{self.base_url}/api/v1/models")
+        except httpx.RequestError as exc:
+            raise AvaError(f"network error: {exc}") from exc
+        if response.status_code == 401:
+            raise TokenExpired("token rejected by Ava")
+        if response.status_code >= 400:
+            body = response.text[:500]
+            raise AvaError(f"HTTP {response.status_code}: {body}")
+        try:
+            data = response.json()
+            return {
+                "models": list(data.get("models", [])),
+                "default": data.get("default", ""),
+            }
+        except (ValueError, KeyError) as exc:
+            raise AvaError(f"malformed response: {exc}") from exc
+
     def close(self):
         self._client.close()

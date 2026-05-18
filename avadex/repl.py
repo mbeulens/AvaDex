@@ -48,6 +48,7 @@ class Repl:
         self.agent = agent
         self.renderer = AnsiRenderer()
         self.input_fn = input_fn or self._default_input
+        self._model_cache = None
         # If the agent supports prompt_user, wire it
         if prompt_user is not None and hasattr(agent, "prompt_user"):
             agent.prompt_user = prompt_user
@@ -107,8 +108,48 @@ class Repl:
             permissions.add_rule(Rule(tool=tool, pattern=pattern.strip()))
             self.renderer.info(f"added: {tool} {pattern}")
             return False
+        if cmd == "model":
+            self._handle_model_command(_arg.strip())
+            return False
         self.renderer.error(f"unknown command: /{cmd}")
         return False
+
+    def _handle_model_command(self, arg: str):
+        if not arg:
+            self.renderer.info(f"current model: {self.agent.model}")
+            self.renderer.info("usage: /model list | /model <name> | /model refresh")
+            return
+        if arg in ("list", "refresh"):
+            try:
+                data = self.agent.client.list_models()
+            except Exception as exc:
+                self.renderer.error(f"could not fetch model list: {exc}")
+                return
+            self._model_cache = data
+            models = data.get("models", [])
+            if not models:
+                self.renderer.info("no models available")
+                return
+            self.renderer.info(f"default: {data.get('default') or '(none)'}")
+            for m in models:
+                marker = "*" if m["id"] == self.agent.model else " "
+                size = f"  {m.get('size', '')}" if m.get("size") else ""
+                self.renderer.info(f"  {marker} {m['id']}{size}")
+            return
+        # /model <name> — switch
+        if self._model_cache is None:
+            try:
+                self._model_cache = self.agent.client.list_models()
+            except Exception as exc:
+                self.renderer.error(f"could not fetch model list: {exc}")
+                return
+        ids = {m["id"] for m in self._model_cache.get("models", [])}
+        if arg in ids:
+            self.agent.model = arg
+            self.renderer.info(f"model set to {arg}")
+            return
+        self.renderer.error(f"no such model: {arg}")
+        self.renderer.info("available: " + ", ".join(sorted(ids)) if ids else "(none cached)")
 
 
 def build_terminal_prompter(input_fn=None):

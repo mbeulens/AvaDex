@@ -66,3 +66,70 @@ def test_ansi_renderer_error_prefix(capsys):
     captured = capsys.readouterr()
     # error goes to stderr; check via capsys
     assert "boom" in captured.out.lower() or "boom" in captured.err.lower()
+
+
+class StubAgentWithModels:
+    def __init__(self, current="gemma4"):
+        self.model = current
+        self.turns = []
+        self.messages = []
+        self.client = self._FakeClient()
+
+    def run_turn(self, text, renderer):
+        pass
+
+    def clear(self):
+        pass
+
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        def list_models(self):
+            self.calls += 1
+            return {
+                "models": [
+                    {"id": "gemma4:26b", "size": "16.2GB"},
+                    {"id": "llama3.1:70b", "size": "42.1GB"},
+                ],
+                "default": "gemma4:26b",
+            }
+
+
+def test_model_no_arg_prints_current(capsys):
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    out = capsys.readouterr().out
+    assert "gemma4:26b" in out
+
+
+def test_model_list_shows_all_with_marker(capsys):
+    agent = StubAgentWithModels(current="llama3.1:70b")
+    inputs = iter(["/model list", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    out = capsys.readouterr().out
+    assert "gemma4:26b" in out
+    assert "llama3.1:70b" in out
+    # Marker on current model
+    assert "* llama3.1:70b" in out
+
+
+def test_model_switch_changes_agent_model(capsys):
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model llama3.1:70b", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    assert agent.model == "llama3.1:70b"
+
+
+def test_model_unknown_shows_error_and_list(capsys):
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model nonexistent", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert "nonexistent" in combined.lower() or "no such" in combined.lower()

@@ -42,6 +42,10 @@ write or shell command unless the action matches your allowlist
 - `/exit` — quit
 - `/clear` — reset conversation
 - `/tools` — list available tools
+- `/model` — show current model
+- `/model list` — show available models from Ava
+- `/model <name>` — switch model for subsequent requests
+- `/model refresh` — re-fetch the model list
 - `/allow <tool> <pattern>` — append a permission rule
 
 ## Configuration
