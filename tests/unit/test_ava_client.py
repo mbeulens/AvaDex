@@ -129,3 +129,53 @@ def test_list_models_sends_bearer_auth(httpx_mock):
     client.list_models()
     request = httpx_mock.get_request()
     assert request.headers["Authorization"] == "Bearer my-key"
+
+
+def test_messages_200_with_error_type_raises_ava_error(httpx_mock):
+    """If Ava returns HTTP 200 but a body shaped like an error, raise instead
+    of silently producing an empty turn."""
+    httpx_mock.add_response(
+        method="POST",
+        url="https://ava.test/api/v1/messages",
+        status_code=200,
+        json={"type": "error", "error": {"type": "internal", "message": "ollama crashed"}},
+    )
+    client = AvaClient("https://ava.test", "tkn")
+    with pytest.raises(AvaError, match="Ava returned an error"):
+        client.messages(system="", messages=[{"role": "user", "content": "x"}], tools=[])
+
+
+def test_messages_200_with_error_key_raises_ava_error(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://ava.test/api/v1/messages",
+        status_code=200,
+        json={"error": "overloaded"},
+    )
+    client = AvaClient("https://ava.test", "tkn")
+    with pytest.raises(AvaError, match="Ava returned an error"):
+        client.messages(system="", messages=[{"role": "user", "content": "x"}], tools=[])
+
+
+def test_messages_200_with_empty_body_raises_ava_error(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://ava.test/api/v1/messages",
+        status_code=200,
+        json={},
+    )
+    client = AvaClient("https://ava.test", "tkn")
+    with pytest.raises(AvaError, match="unexpected response shape"):
+        client.messages(system="", messages=[{"role": "user", "content": "x"}], tools=[])
+
+
+def test_messages_200_with_non_object_body_raises_ava_error(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://ava.test/api/v1/messages",
+        status_code=200,
+        json=["not", "an", "object"],
+    )
+    client = AvaClient("https://ava.test", "tkn")
+    with pytest.raises(AvaError, match="not an object"):
+        client.messages(system="", messages=[{"role": "user", "content": "x"}], tools=[])

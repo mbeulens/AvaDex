@@ -56,7 +56,26 @@ class AvaClient:
                 raise ContextOverflow(f"HTTP {response.status_code}: {body}")
             raise AvaError(f"HTTP {response.status_code}: {body}")
         try:
-            return parse_response(response.json())
+            raw = response.json()
+        except ValueError as exc:
+            raise AvaError(f"malformed response (not JSON): {exc}") from exc
+
+        # Detect non-Anthropic 200 responses. Ava is supposed to return
+        # {"content": [...], "stop_reason": "...", "model": "...", "usage": {...}}.
+        # An Ollama crash or upstream bug can produce a 200 with {"error": ...}
+        # or {"type": "error"} — without this check, parse_response would
+        # default the missing fields and the REPL would render an empty turn.
+        if not isinstance(raw, dict):
+            raise AvaError(f"unexpected response shape (not an object): {str(raw)[:300]}")
+        if raw.get("type") == "error" or (
+            "error" in raw and "content" not in raw
+        ):
+            raise AvaError(f"Ava returned an error: {str(raw)[:300]}")
+        if "content" not in raw and "stop_reason" not in raw:
+            raise AvaError(f"unexpected response shape from Ava: {str(raw)[:300]}")
+
+        try:
+            return parse_response(raw)
         except (ValueError, KeyError) as exc:
             raise AvaError(f"malformed response: {exc}") from exc
 
