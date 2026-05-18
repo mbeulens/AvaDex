@@ -109,3 +109,24 @@ class Repl:
             return False
         self.renderer.error(f"unknown command: /{cmd}")
         return False
+
+
+def build_terminal_prompter(input_fn=None):
+    """Return a callable(tool_name, args) -> (answer, pattern_or_None).
+
+    answer ∈ {'yes', 'always', 'deny'}; pattern is set only for 'always'.
+    """
+    _input = input_fn or input
+    def prompter(tool_name: str, args: dict):
+        subject = args.get("command") or args.get("path") or str(args)
+        print(f"  Run: {tool_name}({subject})")
+        choice = _input("  [y]es / [n]o / [a]lways ? ").strip().lower()
+        if choice in ("y", "yes"):
+            return ("yes", None)
+        if choice in ("a", "always"):
+            pattern = _input(f"  Pattern for {tool_name} (glob): ").strip() or "*"
+            return ("always", pattern)
+        if choice in ("n", "no"):
+            return ("deny", None)
+        return ("deny", None)
+    return prompter
