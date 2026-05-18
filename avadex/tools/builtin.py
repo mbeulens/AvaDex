@@ -110,13 +110,14 @@ EDIT_FILE = ToolDefinition(
 
 
 DEFAULT_BASH_TIMEOUT = 30
+MAX_BASH_TIMEOUT = 600
 
 
 def bash_tool(args: dict) -> ToolResult:
     cmd = args.get("command", "")
     if not cmd:
         return ToolResult(content="missing 'command' argument", is_error=True)
-    timeout = int(args.get("timeout", DEFAULT_BASH_TIMEOUT))
+    timeout = min(int(args.get("timeout", DEFAULT_BASH_TIMEOUT)), MAX_BASH_TIMEOUT)
     try:
         proc = subprocess.run(
             cmd,

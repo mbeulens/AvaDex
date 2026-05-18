@@ -29,3 +29,24 @@ def test_bash_timeout():
 def test_bash_missing_command():
     result = bash_tool({})
     assert result.is_error
+
+
+def test_bash_timeout_clamped_to_max(monkeypatch):
+    """An absurd timeout value is clamped to MAX_BASH_TIMEOUT (600s) so the
+    model can't accidentally block AvaDex for hours."""
+    from avadex.tools import builtin
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["timeout"] = kwargs.get("timeout")
+        # Mimic a fast success
+        class P:
+            returncode = 0
+            stdout = "ok"
+            stderr = ""
+        return P()
+
+    monkeypatch.setattr(builtin.subprocess, "run", fake_run)
+    result = bash_tool({"command": "echo hi", "timeout": 99999})
+    assert not result.is_error
+    assert captured["timeout"] == builtin.MAX_BASH_TIMEOUT
