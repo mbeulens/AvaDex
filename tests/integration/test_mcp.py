@@ -4,11 +4,16 @@ from avadex.tools.registry import ToolRegistry
 
 
 @pytest.mark.skipif(
-    not __import__("shutil").which("uvx"),
-    reason="requires uvx to fetch mcp-server-everything",
+    not __import__("shutil").which("npx"),
+    reason="requires npx to fetch @modelcontextprotocol/server-everything",
 )
 def test_mcp_lists_tools_from_reference_server():
-    client = MCPClient(name="ref", command="uvx", args=["mcp-server-everything"])
+    # Official MCP reference server, published on npm
+    client = MCPClient(
+        name="ref",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-everything"],
+    )
     client.start()
     try:
         tools = client.list_tools()

@@ -88,6 +88,16 @@ class MCPClient:
         try:
             fut = asyncio.run_coroutine_threadsafe(_close(), self._loop)
             fut.result(timeout=10)
+        except RuntimeError as exc:
+            # anyio's cancel scopes are task-bound; because _setup and _close
+            # run on different ephemeral tasks (each spawned by
+            # run_coroutine_threadsafe), aclose() complains. The subprocess
+            # is still terminated below when the daemon thread exits with
+            # the loop, so swallow this specific error and move on.
+            if "cancel scope" not in str(exc):
+                raise
+        except Exception:
+            pass
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._thread.join(timeout=5)
