@@ -49,6 +49,7 @@ class Repl:
         self.renderer = AnsiRenderer()
         self.input_fn = input_fn or self._default_input
         self._model_cache = None
+        self._pending_model_pick = False
         # If the agent supports prompt_user, wire it
         if prompt_user is not None and hasattr(agent, "prompt_user"):
             agent.prompt_user = prompt_user
@@ -72,6 +73,13 @@ class Repl:
                 return
             if not line:
                 continue
+            # After `/model` showed a list, treat a plain digit as the pick.
+            # Any other input clears the pending state and is processed normally.
+            if self._pending_model_pick:
+                self._pending_model_pick = False
+                if line.isdigit():
+                    self._handle_model_command(line)
+                    continue
             if line.startswith("/"):
                 if self._handle_slash(line):
                     return
@@ -132,7 +140,8 @@ class Repl:
                 marker = "*" if m["id"] == self.agent.model else " "
                 size = f"  {m.get('size', '')}" if m.get("size") else ""
                 self.renderer.info(f"  [{i}] {marker} {m['id']}{size}")
-            self.renderer.info("switch with /model <number> or /model <name>")
+            self.renderer.info("press a number to pick — or /model <name>")
+            self._pending_model_pick = True
             return
 
         # Ensure cache populated before number- or name-based switch

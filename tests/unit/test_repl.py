@@ -76,10 +76,10 @@ class StubAgentWithModels:
         self.client = self._FakeClient()
 
     def run_turn(self, text, renderer):
-        pass
+        self.turns.append(text)
 
     def clear(self):
-        pass
+        self.turns.clear()
 
     class _FakeClient:
         def __init__(self):
@@ -164,3 +164,35 @@ def test_model_list_shows_numbered_entries(capsys):
     out = capsys.readouterr().out
     assert "[1]" in out
     assert "[2]" in out
+
+
+def test_model_plain_digit_after_list_switches(capsys):
+    """Typing `/model` then a plain `2` (no slash) picks the 2nd model."""
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model", "2", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    assert agent.model == "llama3.1:70b"
+
+
+def test_model_pending_cleared_by_non_digit(capsys):
+    """After `/model`, typing something non-digit clears pending and is processed
+    normally (sent to agent.run_turn, not treated as a model pick)."""
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/model", "hello there", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    # Model unchanged; "hello there" was passed through to the agent
+    assert agent.model == "gemma4:26b"
+    assert "hello there" in agent.turns
+
+
+def test_model_plain_digit_without_list_first_does_nothing_special(capsys):
+    """A plain `2` typed cold (no preceding /model) goes to the agent, not the
+    model picker — pending state was never set."""
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["2", "/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    assert agent.model == "gemma4:26b"
+    assert "2" in agent.turns
