@@ -9,6 +9,7 @@ from avadex.permissions import PermissionManager
 from avadex.context import prune
 from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.renderer import Renderer
+from avadex.spinner import Spinner
 
 MAX_ITERATIONS = 25
 
@@ -49,24 +50,26 @@ class AgentLoop:
         for _ in range(MAX_ITERATIONS):
             try:
                 try:
-                    response: AvaResponse = self.client.messages(
-                        system=self.system_prompt,
-                        messages=self.messages,
-                        tools=self.registry.schemas(),
-                        max_tokens=self.max_response_tokens,
-                        model=self.model,
-                    )
-                except ContextOverflow:
-                    # Drop two oldest pairs (4 messages) and retry once
-                    self.messages = self.messages[4:] if len(self.messages) > 4 else self.messages[-1:]
-                    try:
-                        response = self.client.messages(
+                    with Spinner():
+                        response: AvaResponse = self.client.messages(
                             system=self.system_prompt,
                             messages=self.messages,
                             tools=self.registry.schemas(),
                             max_tokens=self.max_response_tokens,
                             model=self.model,
                         )
+                except ContextOverflow:
+                    # Drop two oldest pairs (4 messages) and retry once
+                    self.messages = self.messages[4:] if len(self.messages) > 4 else self.messages[-1:]
+                    try:
+                        with Spinner():
+                            response = self.client.messages(
+                                system=self.system_prompt,
+                                messages=self.messages,
+                                tools=self.registry.schemas(),
+                                max_tokens=self.max_response_tokens,
+                                model=self.model,
+                            )
                     except ContextOverflow:
                         renderer.error("context too full even after pruning; run /clear")
                         return
