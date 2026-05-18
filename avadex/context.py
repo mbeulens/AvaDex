@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Iterable
 
 SAFETY_FACTOR = 1.2
 
@@ -19,14 +18,18 @@ def _tool_use_ids(message: dict) -> set[str]:
     c = message.get("content", "")
     if not isinstance(c, list):
         return set()
-    return {b.get("id") for b in c if b.get("type") == "tool_use"}
+    return {b["id"] for b in c if b.get("type") == "tool_use" and b.get("id")}
 
 
 def _tool_result_ids(message: dict) -> set[str]:
     c = message.get("content", "")
     if not isinstance(c, list):
         return set()
-    return {b.get("tool_use_id") for b in c if b.get("type") == "tool_result"}
+    return {
+        b["tool_use_id"]
+        for b in c
+        if b.get("type") == "tool_result" and b.get("tool_use_id")
+    }
 
 
 def prune(messages: list[dict], max_tokens: int) -> list[dict]:
