@@ -43,6 +43,7 @@ class AgentLoop:
     def run_turn(self, user_text: str, renderer: Renderer) -> None:
         self.messages.append({"role": "user", "content": user_text})
         self.messages = prune(self.messages, max_tokens=self.max_context_tokens)
+        recent_signatures: list[str] = []
 
         for _ in range(MAX_ITERATIONS):
             response: AvaResponse = self.client.messages(
@@ -53,25 +54,41 @@ class AgentLoop:
                 model=self.model,
             )
 
-            # Render any text blocks immediately
             for block in response.content:
                 if isinstance(block, TextBlock) and block.text:
                     renderer.assistant_text(block.text)
 
-            # Persist assistant turn
-            self.messages.append({
-                "role": "assistant",
-                "content": self._serialize_response_content(response.content),
-            })
+            serialized = self._serialize_response_content(response.content)
+            self.messages.append({"role": "assistant", "content": serialized})
 
             if response.stop_reason != "tool_use":
                 return
 
-            # Execute tools (Task 11 fills this in)
+            # Detect 3-in-a-row identical assistant turns.
+            # Strip volatile tool_use_id before comparing so different
+            # incarnations of the same call still count as identical.
+            signature = self._signature_for_repeat_detection(response.content)
+            recent_signatures.append(signature)
+            if len(recent_signatures) >= 3 and len(set(recent_signatures[-3:])) == 1:
+                renderer.error("repeated output detected — aborting to avoid infinite loop")
+                return
+
             tool_results = self._execute_tools(response.content, renderer)
             self.messages.append({"role": "user", "content": tool_results})
 
         renderer.error("max iterations reached without end_turn")
+
+    def _signature_for_repeat_detection(self, content: list) -> str:
+        """Build a stable string from response content for loop detection.
+        Excludes tool_use_id (volatile across calls) but includes name+input."""
+        import json
+        parts = []
+        for block in content:
+            if isinstance(block, TextBlock):
+                parts.append(("text", block.text))
+            elif isinstance(block, ToolUseBlock):
+                parts.append(("tool_use", block.name, json.dumps(block.input, sort_keys=True)))
+        return json.dumps(parts, sort_keys=True)
 
     def _execute_tools(self, content: list, renderer: Renderer) -> list[dict]:
         from avadex.permissions import Decision, Rule
