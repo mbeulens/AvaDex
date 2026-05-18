@@ -2,6 +2,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from avadex.log import get_logger
+
+log = get_logger("registry")
+
+
+def _brief_args(args: dict) -> str:
+    s = str(args)
+    return s if len(s) <= 200 else s[:197] + "..."
+
 
 @dataclass
 class ToolResult:
@@ -41,6 +50,7 @@ class ToolRegistry:
             return ToolResult(content=f"unknown tool: {name}", is_error=True)
         if not tool.is_available():
             return ToolResult(content=f"tool '{name}' is currently unavailable", is_error=True)
+        log.debug("dispatch tool=%s args=%s", name, _brief_args(args))
         try:
             return tool.handler(args)
         except Exception as exc:

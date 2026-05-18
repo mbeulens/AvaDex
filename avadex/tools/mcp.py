@@ -4,6 +4,9 @@ import threading
 from typing import Optional
 
 from avadex.tools.registry import ToolDefinition, ToolRegistry, ToolResult
+from avadex.log import get_logger
+
+log = get_logger("mcp")
 
 
 class MCPClient:
@@ -82,11 +85,10 @@ class MCPClient:
             was_healthy = self.is_healthy
             self.is_healthy = False
             if was_healthy:
-                import sys
-                print(
-                    f"[warn] MCP server '{self.name}' crashed — disabling its tools "
-                    f"for the rest of this session ({type(exc).__name__}: {exc})",
-                    file=sys.stderr,
+                log.warning(
+                    "MCP server '%s' crashed — disabling its tools for the rest of "
+                    "this session (%s: %s)",
+                    self.name, type(exc).__name__, exc,
                 )
             return ToolResult(
                 content=f"MCP server '{self.name}' is unavailable (crashed: {exc})",

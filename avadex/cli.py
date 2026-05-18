@@ -12,7 +12,9 @@ from avadex.tools.builtin import ALL_BUILTINS
 from avadex.tools.mcp import MCPClient, register_mcp_tools
 from avadex.agent_loop import AgentLoop
 from avadex.repl import Repl, build_terminal_prompter
+from avadex.log import setup as setup_logging, get_logger
 
+log = get_logger("cli")
 
 DEFAULT_CONFIG = Path.home() / ".config" / "avadex" / "config.toml"
 DEFAULT_ALLOWLIST = Path.home() / ".config" / "avadex" / "allowlist.toml"
@@ -34,10 +36,9 @@ def _resolve_initial_model(cfg, client) -> str:
     try:
         info = client.list_models()
     except (AvaError, TokenExpired, Exception) as exc:
-        print(
-            f"[warn] could not fetch Ava's default model ({exc}); "
-            f"using fallback '{FALLBACK_MODEL}'",
-            file=sys.stderr,
+        log.warning(
+            "could not fetch Ava's default model (%s); using fallback '%s'",
+            exc, FALLBACK_MODEL,
         )
         return FALLBACK_MODEL
     return info.get("default") or FALLBACK_MODEL
@@ -95,7 +96,7 @@ def run_repl(
             mc.start()
             mcp_clients.append(mc)
         except Exception as exc:
-            print(f"[warn] MCP server '{entry['name']}' failed to start: {exc}", file=sys.stderr)
+            log.warning("MCP server '%s' failed to start: %s", entry["name"], exc)
     register_mcp_tools(mcp_clients, registry)
 
     permissions = PermissionManager(allowlist_path)
@@ -160,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("repl")    # also the default
 
     args = parser.parse_args(argv)
+    setup_logging(debug=args.debug)
     if args.cmd == "set-key":
         return set_key_command(config_path=args.config)
     if args.cmd == "login":
