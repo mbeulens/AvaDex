@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 import glob as _glob
+import re as _re
 
 from avadex.tools.registry import ToolDefinition, ToolResult
 
@@ -186,4 +187,56 @@ GLOB = ToolDefinition(
 )
 
 
-ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB]
+def grep_files_tool(args: dict) -> ToolResult:
+    pattern = args.get("pattern", "")
+    if not pattern:
+        return ToolResult(content="missing 'pattern' argument", is_error=True)
+    try:
+        rx = _re.compile(pattern)
+    except _re.error as exc:
+        return ToolResult(content=f"invalid regex: {exc}", is_error=True)
+    path_glob = args.get("path_glob", "**/*")
+    base = args.get("base", ".")
+    max_results = int(args.get("max_results", 100))
+    base_p = Path(base)
+    if not base_p.exists():
+        return ToolResult(content=f"base not found: {base_p}", is_error=True)
+    matches = []
+    for p in sorted(_glob.glob(str(base_p / path_glob), recursive=True)):
+        if not Path(p).is_file():
+            continue
+        try:
+            with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                for lineno, line in enumerate(f, 1):
+                    if rx.search(line):
+                        matches.append(f"{p}:{lineno}:{line.rstrip()}")
+                        if len(matches) >= max_results:
+                            break
+        except OSError:
+            continue
+        if len(matches) >= max_results:
+            break
+    if not matches:
+        return ToolResult(content="(no matches)")
+    truncated = " (capped)" if len(matches) >= max_results else ""
+    return ToolResult(content=f"{len(matches)} matches{truncated}:\n" + "\n".join(matches))
+
+
+GREP_FILES = ToolDefinition(
+    name="grep_files",
+    description="Search file contents with a Python regex. Returns 'path:lineno:line' entries, capped at max_results (default 100).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Python regex"},
+            "path_glob": {"type": "string", "description": "Glob to scope which files to search (default '**/*')"},
+            "base": {"type": "string", "description": "Base directory (default: current)"},
+            "max_results": {"type": "integer", "description": "Stop after this many matches (default 100)"},
+        },
+        "required": ["pattern"],
+    },
+    handler=grep_files_tool,
+)
+
+
+ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES]
