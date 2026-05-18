@@ -4,16 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avadex"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local CLI agent powered by Ana's Ava assistant"
 authors = [{name = "Martijn Beulens", email = "m.beulens@syntec-it.nl"}]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
     "prompt_toolkit>=3.0",
-    "tomli>=2.0;python_version<'3.11'",
     "tomli-w>=1.0",
-    "mcp>=0.9",
+    "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
