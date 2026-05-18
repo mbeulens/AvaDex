@@ -239,4 +239,41 @@ GREP_FILES = ToolDefinition(
 )
 
 
-ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES]
+def web_fetch_tool(args: dict) -> ToolResult:
+    url = args.get("url", "")
+    if not url:
+        return ToolResult(content="missing 'url' argument", is_error=True)
+    if not url.startswith(("http://", "https://")):
+        return ToolResult(content="url must start with http:// or https://", is_error=True)
+    max_bytes = int(args.get("max_bytes", 100_000))
+    timeout = float(args.get("timeout", 30))
+    import httpx
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as c:
+            r = c.get(url)
+        if r.status_code >= 400:
+            return ToolResult(content=f"HTTP {r.status_code} from {url}: {r.text[:200]}", is_error=True)
+        body = r.text[:max_bytes]
+        truncated = f"\n... (truncated at {max_bytes} bytes; full body {len(r.text)} bytes)" if len(r.text) > max_bytes else ""
+        return ToolResult(content=body + truncated)
+    except httpx.RequestError as exc:
+        return ToolResult(content=f"network error fetching {url}: {exc}", is_error=True)
+
+
+WEB_FETCH = ToolDefinition(
+    name="web_fetch",
+    description="HTTP GET a URL and return the response body (up to max_bytes, default 100000). Follows redirects. Returns is_error on 4xx/5xx or network failure.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "Absolute URL starting with http:// or https://"},
+            "max_bytes": {"type": "integer", "description": "Cap response body bytes (default 100000)"},
+            "timeout": {"type": "number", "description": "Request timeout in seconds (default 30)"},
+        },
+        "required": ["url"],
+    },
+    handler=web_fetch_tool,
+)
+
+
+ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH]
