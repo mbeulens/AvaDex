@@ -1,6 +1,8 @@
 import json
+import json as _json
 from pathlib import Path
 from avadex.cli import run_repl
+from avadex.agent_loop import MAX_ITERATIONS
 
 
 def test_repl_full_turn_against_fake_ava(tmp_path, httpx_mock):
@@ -80,3 +82,37 @@ ava_token = "tkn"
     last_msg = second["messages"][-1]
     assert last_msg["content"][0]["type"] == "tool_result"
     assert "hello" in last_msg["content"][0]["content"]
+
+
+def test_repl_iteration_cap_with_real_stack(tmp_path, httpx_mock):
+    """Ava returns tool_use forever; CLI must abort at MAX_ITERATIONS."""
+    # Auto-allow bash for the test
+    allowlist = tmp_path / "allowlist.toml"
+    allowlist.write_text('[[rules]]\ntool = "bash"\npattern = "*"\n')
+
+    # Each returned tool_use has a unique input so the repeated-output
+    # detector doesn't trip before the iteration cap.
+    for i in range(MAX_ITERATIONS):
+        httpx_mock.add_response(
+            method="POST",
+            url="https://ava.test/api/v1/messages",
+            json={
+                "content": [{"type": "tool_use", "id": f"tu{i}", "name": "bash",
+                             "input": {"command": f"echo loop_{i}"}}],
+                "model": "gemma4",
+                "stop_reason": "tool_use",
+                "usage": {},
+            },
+        )
+
+    config = tmp_path / "config.toml"
+    config.write_text('ava_url = "https://ava.test"\nava_token = "t"\n')
+
+    inputs = iter(["spin", "/exit"])
+    rc = run_repl(
+        config_path=config, allowlist_path=allowlist,
+        input_fn=lambda _: next(inputs),
+    )
+    assert rc == 0
+    # Exactly MAX_ITERATIONS requests made (not the +1 we registered)
+    assert len(httpx_mock.get_requests()) == MAX_ITERATIONS
