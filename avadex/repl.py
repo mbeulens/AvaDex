@@ -54,6 +54,28 @@ class Repl:
         if prompt_user is not None and hasattr(agent, "prompt_user"):
             agent.prompt_user = prompt_user
 
+    def _print_welcome(self) -> None:
+        import os
+        import avadex
+        model = getattr(self.agent, "model", "(unknown)")
+        cwd = os.getcwd()
+        banner = (
+            "\n"
+            "     /\\\n"
+            f"    /  \\      AvaDex {avadex.__version__}\n"
+            "   / /\\ \\    local CLI agent · powered by Ava\n"
+            "  /_/  \\_\\\n"
+            "\n"
+            f"  cwd    : {cwd}\n"
+            f"  model  : {model}\n"
+            "\n"
+            "  /model        show models — then type the number to pick (or /model <name>)\n"
+            "  /tools        list tools the agent can call\n"
+            "  /clear        reset conversation\n"
+            "  /exit         quit\n"
+        )
+        print(banner)
+
     @staticmethod
     def _default_input(prompt: str) -> str:
         from prompt_toolkit import PromptSession
@@ -65,6 +87,7 @@ class Repl:
         return session.prompt(prompt, multiline=False)
 
     def run(self):
+        self._print_welcome()
         while True:
             try:
                 line = self.input_fn(self.PROMPT).strip()

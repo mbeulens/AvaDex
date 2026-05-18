@@ -187,6 +187,22 @@ def test_model_pending_cleared_by_non_digit(capsys):
     assert "hello there" in agent.turns
 
 
+def test_welcome_banner_shows_title_cwd_model_and_tips(capsys):
+    import os
+    import avadex
+    agent = StubAgentWithModels(current="gemma4:26b")
+    inputs = iter(["/exit"])
+    repl = Repl(agent=agent, input_fn=lambda _: next(inputs))
+    repl.run()
+    out = capsys.readouterr().out
+    assert "AvaDex" in out
+    assert avadex.__version__ in out
+    assert os.getcwd() in out
+    assert "gemma4:26b" in out
+    assert "/model" in out
+    assert "/exit" in out
+
+
 def test_model_plain_digit_without_list_first_does_nothing_special(capsys):
     """A plain `2` typed cold (no preceding /model) goes to the agent, not the
     model picker — pending state was never set."""
