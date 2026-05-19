@@ -91,7 +91,10 @@ class Repl:
     def _print_welcome(self) -> None:
         import avadex
         model = getattr(self.agent, "model", "(unknown)")
-        cwd = os.getcwd()
+        try:
+            cwd = os.getcwd()
+        except (FileNotFoundError, OSError):
+            cwd = "(current directory unavailable)"
         banner = (
             "\n"
             f"     {_c('/\\', 'cyan')}\n"
