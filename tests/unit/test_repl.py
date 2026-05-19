@@ -214,37 +214,6 @@ def test_model_plain_digit_without_list_first_does_nothing_special(capsys):
     assert "2" in agent.turns
 
 
-# ---------------------------------------------------------------------------
-# _strip_trailing_semicolon
-# ---------------------------------------------------------------------------
-
-def test_strip_trailing_semicolon_no_semicolon():
-    from avadex.repl import _strip_trailing_semicolon
-    assert _strip_trailing_semicolon("hello") == "hello"
-    assert _strip_trailing_semicolon("hello\n") == "hello"
-
-
-def test_strip_trailing_semicolon_with_semicolon():
-    from avadex.repl import _strip_trailing_semicolon
-    assert _strip_trailing_semicolon("hello;") == "hello"
-    assert _strip_trailing_semicolon("hello ;") == "hello"
-    assert _strip_trailing_semicolon("hello;\n") == "hello"
-    assert _strip_trailing_semicolon("hello; \n  ") == "hello"
-
-
-def test_strip_trailing_semicolon_multiline():
-    from avadex.repl import _strip_trailing_semicolon
-    assert _strip_trailing_semicolon("line1\nline2;") == "line1\nline2"
-    # Semicolon in the middle of a line is preserved
-    assert _strip_trailing_semicolon("line1;\nline2") == "line1;\nline2"
-
-
-def test_strip_trailing_semicolon_only_semicolon():
-    from avadex.repl import _strip_trailing_semicolon
-    assert _strip_trailing_semicolon(";") == ""
-    assert _strip_trailing_semicolon(" ; ") == ""
-
-
 def test_default_input_constructs_without_error():
     """Importing and creating a Repl with the default _default_input should
     not raise — verifies the prompt_toolkit setup is syntactically sound.

@@ -70,16 +70,6 @@ class AnsiRenderer:
         return s if len(s) <= 60 else s[:57] + "..."
 
 
-def _strip_trailing_semicolon(text: str) -> str:
-    """If text (after rstrip) ends with ';', remove that semicolon and any
-    whitespace it might have collected. Used by the REPL's Enter-submit
-    shortcut so the ';' is never part of the submitted prompt."""
-    stripped = text.rstrip()
-    if stripped.endswith(";"):
-        return stripped[:-1].rstrip()
-    return stripped
-
-
 class Repl:
     PROMPT = "Ava> "
 
@@ -133,23 +123,20 @@ class Repl:
 
         @bindings.add("enter")
         def _(event):
-            """Plain Enter: submit if the line ends with ';' (after stripping
-            trailing whitespace), otherwise insert a newline."""
-            buf = event.current_buffer
-            text = buf.text
-            # Trailing semicolon shortcut: submit
-            if text.rstrip().endswith(";"):
-                buf.text = _strip_trailing_semicolon(text)
-                buf.cursor_position = len(buf.text)
-                buf.validate_and_handle()
-            else:
-                buf.insert_text("\n")
+            """Plain Enter submits — the common case."""
+            event.current_buffer.validate_and_handle()
 
-        # Esc-Enter as the alternative submit (prompt_toolkit's standard
-        # multiline submit chord — explicit here for clarity).
         @bindings.add("escape", "enter")
         def _(event):
-            event.current_buffer.validate_and_handle()
+            """Esc-Enter (Alt-Enter) inserts a newline. Use this when you
+            want to type a multi-line prompt."""
+            event.current_buffer.insert_text("\n")
+
+        @bindings.add("c-j")
+        def _(event):
+            """Ctrl-J also inserts a newline. Some terminals send c-j when
+            you press Shift-Enter."""
+            event.current_buffer.insert_text("\n")
 
         session = PromptSession(
             history=FileHistory(str(hist_path)),

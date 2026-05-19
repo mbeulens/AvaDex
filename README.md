@@ -33,8 +33,9 @@ Type a request like:
 Ava> add a healthcheck endpoint to server.py
 ```
 
-The prompt supports multi-line input. Press Enter to add a newline, or
-end a line with `;` and press Enter to submit. Esc-Enter also submits.
+The prompt supports multi-line input. Press **Enter** to submit, and
+**Esc-Enter** (or **Ctrl-J**, which some terminals send for Shift-Enter)
+to insert a newline.
 
 AvaDex will call tools (file reads, edits, shell) and prompt before any
 write or shell command unless the action matches your allowlist
