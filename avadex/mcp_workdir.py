@@ -31,3 +31,23 @@ def load_dotenv(path: Path) -> dict[str, str]:
         if key:
             result[key] = val
     return result
+
+
+def claude_to_raw(mcp_json: dict) -> list[dict]:
+    """Translate Claude's `.mcp.json` (a `mcpServers` map) into the raw-dict
+    shape that `config._parse_mcp_servers` consumes: the dict key becomes
+    `name`, Claude's `type` becomes `transport` (default `stdio`), and
+    command/args/url/headers are carried through.
+    """
+    servers = mcp_json.get("mcpServers", {})
+    raw: list[dict] = []
+    for name, entry in servers.items():
+        raw.append({
+            "name": name,
+            "transport": entry.get("type", "stdio"),
+            "command": entry.get("command", ""),
+            "args": entry.get("args", []),
+            "url": entry.get("url", ""),
+            "headers": entry.get("headers", {}),
+        })
+    return raw
