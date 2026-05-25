@@ -21,7 +21,7 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
     assert cfg.ava_token == "abc"
     assert cfg.max_context_tokens == 3000
     assert len(cfg.mcp_servers) == 1
-    assert cfg.mcp_servers[0]["name"] == "fs"
+    assert cfg.mcp_servers[0].name == "fs"
 
 
 def test_load_missing_raises(tmp_path):
@@ -72,3 +72,24 @@ args = []
     assert cfg.ava_token == "new"
     assert cfg.max_context_tokens == 2000
     assert len(cfg.mcp_servers) == 1
+
+
+def test_mcp_stdio_entry_parses_to_dataclass(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "fs"
+command = "npx"
+args = ["-y", "server"]
+''')
+    cfg = load_config(p)
+    s = cfg.mcp_servers[0]
+    assert s.name == "fs"
+    assert s.transport == "stdio"      # defaulted
+    assert s.command == "npx"
+    assert s.args == ["-y", "server"]
+    assert s.url == ""
+    assert s.headers == {}
