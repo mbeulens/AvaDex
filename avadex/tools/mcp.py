@@ -30,7 +30,7 @@ def _open_transport(client: "MCPClient"):
 
 
 class MCPClient:
-    """Synchronous facade over the async mcp Python SDK (stdio transport).
+    """Synchronous facade over the async mcp Python SDK (stdio, http, and sse transports).
 
     Owns a background asyncio loop so the rest of AvaDex can stay sync.
     """
