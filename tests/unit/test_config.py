@@ -93,3 +93,59 @@ args = ["-y", "server"]
     assert s.args == ["-y", "server"]
     assert s.url == ""
     assert s.headers == {}
+
+
+def test_mcp_http_requires_url(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "remote"
+transport = "http"
+''')
+    with pytest.raises(ConfigMissing, match="url"):
+        load_config(p)
+
+
+def test_mcp_sse_requires_url(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "legacy"
+transport = "sse"
+''')
+    with pytest.raises(ConfigMissing, match="url"):
+        load_config(p)
+
+
+def test_mcp_stdio_requires_command(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "local"
+''')
+    with pytest.raises(ConfigMissing, match="command"):
+        load_config(p)
+
+
+def test_mcp_bad_transport_raises(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "x"
+transport = "carrier-pigeon"
+url = "https://x"
+''')
+    with pytest.raises(ConfigMissing, match="transport"):
+        load_config(p)

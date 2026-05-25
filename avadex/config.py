@@ -72,6 +72,14 @@ def _parse_mcp_servers(raw: list[dict]) -> list[MCPServerConfig]:
                 f"MCP server {name!r} has invalid transport {transport!r}; "
                 f"expected one of {sorted(_VALID_TRANSPORTS)}"
             )
+        if transport == "stdio" and not entry.get("command"):
+            raise ConfigMissing(
+                f"MCP server {name!r} uses stdio transport but is missing required field 'command'"
+            )
+        if transport in ("http", "sse") and not entry.get("url"):
+            raise ConfigMissing(
+                f"MCP server {name!r} uses {transport} transport but is missing required field 'url'"
+            )
         servers.append(MCPServerConfig(
             name=name,
             transport=transport,
