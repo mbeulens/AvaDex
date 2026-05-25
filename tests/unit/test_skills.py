@@ -115,3 +115,29 @@ def test_render_skill_index_lists_skills_sorted():
     assert "- alpha: Alpha does stuff." in out
     assert "- beta: Beta does things." in out
     assert out.index("alpha") < out.index("beta")  # sorted by name
+
+
+def test_load_skill_returns_body():
+    from avadex.skills import make_load_skill_tool, Skill
+    skills = {"demo": Skill("demo", "d", "THE BODY", Path("/x"), "global")}
+    tool = make_load_skill_tool(skills)
+    assert tool.name == "load_skill"
+    result = tool.handler({"name": "demo"})
+    assert result.content == "THE BODY"
+    assert result.is_error is False
+
+
+def test_load_skill_unknown_name_errors():
+    from avadex.skills import make_load_skill_tool, Skill
+    skills = {"demo": Skill("demo", "d", "b", Path("/x"), "global")}
+    tool = make_load_skill_tool(skills)
+    result = tool.handler({"name": "nope"})
+    assert result.is_error is True
+    assert "demo" in result.content  # lists available names
+
+
+def test_load_skill_missing_name_errors():
+    from avadex.skills import make_load_skill_tool
+    tool = make_load_skill_tool({})
+    result = tool.handler({})
+    assert result.is_error is True

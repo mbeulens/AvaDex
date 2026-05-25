@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from avadex.log import get_logger
+from avadex.tools.registry import ToolDefinition, ToolResult
 
 log = get_logger("skills")
 
@@ -76,3 +77,37 @@ def render_skill_index(skills: dict[str, Skill]) -> str:
     for s in sorted(skills.values(), key=lambda s: s.name):
         lines.append(f"- {s.name}: {s.description}")
     return "\n".join(lines)
+
+
+def make_load_skill_tool(skills: dict[str, Skill]) -> ToolDefinition:
+    """Build the `load_skill` tool, closing over the discovered skills (mirrors
+    register_mcp_tools closing over clients)."""
+    def handler(args: dict) -> ToolResult:
+        name = args.get("name", "")
+        if not name:
+            return ToolResult(content="missing 'name' argument", is_error=True)
+        skill = skills.get(name)
+        if skill is None:
+            available = ", ".join(sorted(skills)) or "(none)"
+            return ToolResult(
+                content=f"unknown skill '{name}'. Available: {available}",
+                is_error=True,
+            )
+        return ToolResult(content=skill.body)
+    return ToolDefinition(
+        name="load_skill",
+        description=(
+            "Load the full instructions for a named skill (see the SKILLS list "
+            "in your system prompt). Call this before doing work that matches a "
+            "skill's description."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string",
+                         "description": "Skill name, e.g. 'create-partner'"}
+            },
+            "required": ["name"],
+        },
+        handler=handler,
+    )
