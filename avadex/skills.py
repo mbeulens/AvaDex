@@ -64,3 +64,15 @@ def discover_skills(cwd: Path) -> dict[str, Skill]:
             if parsed is not None:
                 skills[parsed.name] = parsed   # workdir iterated last -> wins
     return skills
+
+
+def render_skill_index(skills: dict[str, Skill]) -> str:
+    """One-line-per-skill index for the system prompt. Empty string if none."""
+    if not skills:
+        return ""
+    lines = ["You have these SKILLS — focused playbooks for specific tasks. "
+             "When the user's request matches one, call the `load_skill` tool "
+             "with its name to read the full instructions BEFORE acting:"]
+    for s in sorted(skills.values(), key=lambda s: s.name):
+        lines.append(f"- {s.name}: {s.description}")
+    return "\n".join(lines)

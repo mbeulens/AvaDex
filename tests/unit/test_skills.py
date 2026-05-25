@@ -97,3 +97,21 @@ def test_discover_missing_dirs_returns_empty(tmp_path, monkeypatch):
     cwd = tmp_path / "work"
     cwd.mkdir()
     assert skills_mod.discover_skills(cwd) == {}
+
+
+def test_render_skill_index_empty():
+    from avadex.skills import render_skill_index
+    assert render_skill_index({}) == ""
+
+
+def test_render_skill_index_lists_skills_sorted():
+    from avadex.skills import render_skill_index, Skill
+    skills = {
+        "beta": Skill("beta", "Beta does things.", "b", Path("/x"), "global"),
+        "alpha": Skill("alpha", "Alpha does stuff.", "a", Path("/y"), "workdir"),
+    }
+    out = render_skill_index(skills)
+    assert "load_skill" in out
+    assert "- alpha: Alpha does stuff." in out
+    assert "- beta: Beta does things." in out
+    assert out.index("alpha") < out.index("beta")  # sorted by name
