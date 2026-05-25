@@ -33,8 +33,9 @@ Type a request like:
 Ava> add a healthcheck endpoint to server.py
 ```
 
-The prompt supports multi-line input. Press Enter to add a newline, or
-end a line with `;` and press Enter to submit. Esc-Enter also submits.
+The prompt supports multi-line input. Press **Enter** to submit, and
+**Esc-Enter** (or **Ctrl-J**, which some terminals send for Shift-Enter)
+to insert a newline.
 
 AvaDex will call tools (file reads, edits, shell) and prompt before any
 write or shell command unless the action matches your allowlist
@@ -89,6 +90,30 @@ name = "filesystem"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/you"]
 ```
+
+MCP servers can also be reached over HTTP. Set `transport` to `"http"`
+(Streamable HTTP, recommended) or `"sse"` (legacy) and provide a `url`.
+A `[mcp_servers.headers]` table supplies request headers; values may reference
+environment variables with `${VAR}` so secrets stay out of the config file:
+
+```toml
+# Streamable HTTP with bearer auth from the environment
+[[mcp_servers]]
+name = "github"
+transport = "http"
+url = "https://mcp.example.com/mcp"
+[mcp_servers.headers]
+Authorization = "Bearer ${GITHUB_MCP_TOKEN}"
+
+# legacy SSE
+[[mcp_servers]]
+name = "legacy"
+transport = "sse"
+url = "https://old.example.com/sse"
+```
+
+`transport` defaults to `"stdio"`, so existing `command`/`args` entries are
+unchanged. A `${VAR}` that is not set in the environment is a startup error.
 
 ## Security
 

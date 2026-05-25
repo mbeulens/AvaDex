@@ -59,17 +59,32 @@ def _build_system_prompt(cfg) -> str:
         "- Shell: bash (synchronous, default 30s timeout); bash_bg / bash_output / kill_bash / bash_list (background processes)\n"
         "- Web: web_fetch (GET a URL, returns up to 100KB of text)\n"
         "- Task tracking: todo_write, todo_read (persisted across turns within the session)\n\n"
+        "ACT, DON'T NARRATE. When the user asks you to build, create, or "
+        "make something — a file, a script, a website, a project — actually "
+        "USE write_file (and bash for mkdir, etc.) to put the bytes on disk "
+        "in the user's current working directory. Do NOT paste file contents "
+        "into the chat as markdown code blocks describing what you would do. "
+        "Examples:\n"
+        "- 'create a small website' → mkdir a sensibly named folder, "
+        "write_file index.html / style.css / script.js into it, then report "
+        "what you created and where (don't dump the HTML in chat).\n"
+        "- 'add a healthcheck endpoint to server.py' → read_file, edit_file "
+        "to insert the route, run the tests with bash.\n"
+        "Only show code in chat when the user explicitly asks you to explain "
+        "or review something — not when they ask you to build.\n\n"
         "USE BASH BOLDLY. For anything not covered by a dedicated tool — "
         "`gh` (GitHub CLI), `git`, `curl`, `find`, `pip`, `npm`, `systemctl`, "
-        "etc. — use the bash tool. Don't say 'I cannot do X'; instead, plan "
-        "a bash invocation that does X. Examples:\n"
-        "- Create a GitHub repo: `gh repo create <name> --private --confirm`\n"
+        "`mkdir`, etc. — use the bash tool. Don't say 'I cannot do X'; "
+        "instead, plan a bash invocation that does X. Examples:\n"
+        "- Create a GitHub repo: `gh repo create <name> --public --confirm`\n"
         "- Read a PR: `gh pr view <number>`\n"
         "- Check service status: `systemctl status <service>`\n\n"
-        "Be concise. When a tool fails, read the error and adapt — don't "
-        "repeat the same failing call. Prefer multi_edit over edit_file when "
-        "you have several changes for one file. Use todo_write to plan "
-        "multi-step work so the user can see progress."
+        "Don't ask 'should I proceed?' after presenting a plan — just "
+        "proceed. The user will interrupt if they disagree. Be concise. "
+        "When a tool fails, read the error and adapt — don't repeat the same "
+        "failing call. Prefer multi_edit over edit_file when you have "
+        "several changes for one file. Use todo_write to plan multi-step "
+        "work so the user can see progress."
     )
 
 
@@ -78,6 +93,21 @@ def run_repl(
     allowlist_path: Path = DEFAULT_ALLOWLIST,
     input_fn=None,
 ) -> int:
+    # Sanity check the current working directory up front. If the shell is
+    # sitting in a deleted/unreachable dir, every relative-path tool (bash,
+    # glob, write_file with a relative path, ...) would surprise-fail.
+    # Bail with a clear message instead.
+    try:
+        import os as _os
+        _os.getcwd()
+    except (FileNotFoundError, OSError) as exc:
+        print(
+            f"current working directory is unavailable ({exc}); "
+            "cd into a valid directory and try again.",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
         cfg = load_config(config_path)
     except ConfigMissing as exc:
@@ -90,13 +120,14 @@ def run_repl(
         registry.register(tool)
 
     mcp_clients = []
-    for entry in cfg.mcp_servers:
-        mc = MCPClient(name=entry["name"], command=entry["command"], args=entry.get("args", []))
+    for s in cfg.mcp_servers:
+        mc = MCPClient(name=s.name, transport=s.transport, command=s.command,
+                       args=s.args, url=s.url, headers=s.headers)
         try:
             mc.start()
             mcp_clients.append(mc)
         except Exception as exc:
-            log.warning("MCP server '%s' failed to start: %s", entry["name"], exc)
+            log.warning("MCP server '%s' failed to start: %s", s.name, exc)
     register_mcp_tools(mcp_clients, registry)
 
     permissions = PermissionManager(allowlist_path)

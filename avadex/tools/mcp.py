@@ -9,16 +9,42 @@ from avadex.log import get_logger
 log = get_logger("mcp")
 
 
+def _open_transport(client: "MCPClient"):
+    """Return the SDK async context manager for the client's transport.
+
+    Calling the SDK client factory does not open a connection; the connection
+    happens when the returned context manager is entered.
+    """
+    from mcp import StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    from mcp.client.sse import sse_client
+    from mcp.client.streamable_http import streamablehttp_client
+
+    if client.transport == "stdio":
+        return stdio_client(StdioServerParameters(command=client.command, args=client.args))
+    if client.transport == "http":
+        return streamablehttp_client(client.url, headers=client.headers or None)
+    if client.transport == "sse":
+        return sse_client(client.url, headers=client.headers or None)
+    raise ValueError(f"unknown MCP transport {client.transport!r}")
+
+
 class MCPClient:
-    """Synchronous facade over the async mcp Python SDK (stdio transport).
+    """Synchronous facade over the async mcp Python SDK (stdio, http, and sse transports).
 
     Owns a background asyncio loop so the rest of AvaDex can stay sync.
     """
 
-    def __init__(self, name: str, command: str, args: list[str]):
+    def __init__(self, name: str, transport: str = "stdio",
+                 command: Optional[str] = None, args: Optional[list[str]] = None,
+                 url: Optional[str] = None,
+                 headers: Optional[dict[str, str]] = None):
         self.name = name
-        self.command = command
-        self.args = args
+        self.transport = transport
+        self.command = command or ""
+        self.args = args or []
+        self.url = url or ""
+        self.headers = headers or {}
         self.is_healthy: bool = True
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
@@ -27,8 +53,7 @@ class MCPClient:
         self._tools_cache: list[dict] = []
 
     def start(self):
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import stdio_client
+        from mcp import ClientSession
         from contextlib import AsyncExitStack
 
         self._loop = asyncio.new_event_loop()
@@ -42,9 +67,8 @@ class MCPClient:
 
         async def _setup():
             self._exit_stack = AsyncExitStack()
-            params = StdioServerParameters(command=self.command, args=self.args)
-            transport = await self._exit_stack.enter_async_context(stdio_client(params))
-            read, write = transport
+            transport = await self._exit_stack.enter_async_context(_open_transport(self))
+            read, write = transport[0], transport[1]
             self._session = await self._exit_stack.enter_async_context(
                 ClientSession(read, write)
             )
