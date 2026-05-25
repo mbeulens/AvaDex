@@ -126,3 +126,18 @@ def test_resolve_non_utf8_mcp_json_raises_configmissing(tmp_path):
     cfg = Config(ava_url="u", ava_token="t")
     with pytest.raises(ConfigMissing):
         resolve_mcp_servers(cfg, tmp_path)
+
+
+def test_resolve_does_not_mutate_os_environ(tmp_path, monkeypatch):
+    import os
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config
+    monkeypatch.delenv("TOK", raising=False)
+    (tmp_path / ".env").write_text("TOK=only_dotenv\n")
+    (tmp_path / ".mcp.json").write_text(HTTP_JSON)
+    cfg = Config(ava_url="u", ava_token="t")
+    result = resolve_mcp_servers(cfg, tmp_path)
+    # The .env value was used for header interpolation...
+    assert result[0].headers["Authorization"] == "Bearer only_dotenv"
+    # ...but it must NOT have leaked into the real process environment.
+    assert "TOK" not in os.environ
