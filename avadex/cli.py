@@ -5,6 +5,7 @@ from getpass import getpass
 from pathlib import Path
 
 from avadex.config import save_token, load_config, ConfigMissing
+from avadex.mcp_workdir import resolve_mcp_servers
 from avadex.ava_client import AvaClient, AvaError, TokenExpired
 from avadex.permissions import PermissionManager
 from avadex.tools.registry import ToolRegistry
@@ -119,8 +120,17 @@ def run_repl(
     for tool in ALL_BUILTINS:
         registry.register(tool)
 
+    try:
+        mcp_specs = resolve_mcp_servers(cfg, Path.cwd())
+    except ConfigMissing as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if (Path.cwd() / ".mcp.json").exists():
+        print(f"Loaded {len(mcp_specs)} MCP server(s) from ./.mcp.json",
+              file=sys.stderr)
+
     mcp_clients = []
-    for s in cfg.mcp_servers:
+    for s in mcp_specs:
         mc = MCPClient(name=s.name, transport=s.transport, command=s.command,
                        args=s.args, url=s.url, headers=s.headers)
         try:
