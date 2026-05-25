@@ -120,12 +120,13 @@ def run_repl(
     for tool in ALL_BUILTINS:
         registry.register(tool)
 
+    cwd = Path.cwd()
     try:
-        mcp_specs = resolve_mcp_servers(cfg, Path.cwd())
+        mcp_specs = resolve_mcp_servers(cfg, cwd)
     except ConfigMissing as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    if (Path.cwd() / ".mcp.json").exists():
+    if (cwd / ".mcp.json").exists():
         print(f"Loaded {len(mcp_specs)} MCP server(s) from ./.mcp.json",
               file=sys.stderr)
 
