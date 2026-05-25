@@ -97,3 +97,43 @@ def test_mcp_client_initializes_healthy():
     from avadex.tools.mcp import MCPClient
     c = MCPClient(name="x", command="true", args=[])
     assert c.is_healthy is True
+
+
+def test_mcp_client_stores_transport_fields():
+    from avadex.tools.mcp import MCPClient
+    c = MCPClient(
+        name="remote", transport="http",
+        url="https://mcp.example.com/mcp",
+        headers={"Authorization": "Bearer x"},
+    )
+    assert c.transport == "http"
+    assert c.url == "https://mcp.example.com/mcp"
+    assert c.headers == {"Authorization": "Bearer x"}
+
+
+def test_open_transport_selects_client_per_transport(monkeypatch):
+    import mcp.client.stdio, mcp.client.sse, mcp.client.streamable_http
+    from avadex.tools.mcp import MCPClient, _open_transport
+
+    # _open_transport does `from mcp.client.X import Y` at call time, so patching
+    # the source-module attribute is seen by the fresh import. Each stub returns
+    # a sentinel instead of a real (network-opening) context manager.
+    monkeypatch.setattr(mcp.client.stdio, "stdio_client", lambda params: "STDIO")
+    monkeypatch.setattr(mcp.client.sse, "sse_client", lambda url, headers=None: "SSE")
+    monkeypatch.setattr(mcp.client.streamable_http, "streamablehttp_client",
+                        lambda url, headers=None: "HTTP")
+
+    assert _open_transport(MCPClient(name="a", command="true")) == "STDIO"
+    assert _open_transport(
+        MCPClient(name="b", transport="http", url="https://h/mcp", headers={"X": "1"})
+    ) == "HTTP"
+    assert _open_transport(
+        MCPClient(name="c", transport="sse", url="https://s/sse")
+    ) == "SSE"
+
+
+def test_open_transport_unknown_raises():
+    from avadex.tools.mcp import MCPClient, _open_transport
+    bad = MCPClient(name="x", transport="bogus", url="https://x")
+    with pytest.raises(ValueError, match="bogus"):
+        _open_transport(bad)
