@@ -69,7 +69,7 @@ def _interpolate_env(value: str, *, server: str, header: str) -> str:
             raise ConfigMissing(
                 f"MCP server {server!r} header {header!r} references "
                 f"${{{var}}} but environment variable {var!r} is not set"
-            )
+            ) from None
     return _ENV_RE.sub(repl, value)
 
 
