@@ -49,3 +49,18 @@ def _parse_skill_file(path: Path, source: str) -> Skill | None:
         return None
     return Skill(name=name, description=desc, body=body.strip(),
                  path=path, source=source)
+
+
+def discover_skills(cwd: Path) -> dict[str, Skill]:
+    """Discover skills from the global dir then the workdir dir. Workdir skills
+    override global ones on name clash. Keyed by skill name."""
+    skills: dict[str, Skill] = {}
+    for base, source in ((GLOBAL_SKILLS_DIR, "global"),
+                         (cwd / WORKDIR_SKILLS_DIRNAME, "workdir")):
+        if not base.is_dir():
+            continue
+        for skill_md in sorted(base.glob("*/SKILL.md")):
+            parsed = _parse_skill_file(skill_md, source)
+            if parsed is not None:
+                skills[parsed.name] = parsed   # workdir iterated last -> wins
+    return skills

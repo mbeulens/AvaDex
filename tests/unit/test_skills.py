@@ -50,3 +50,50 @@ def test_parse_skill_file_missing_description(tmp_path):
     f = tmp_path / "SKILL.md"
     f.write_text("---\nname: only-name\n---\nbody\n")
     assert _parse_skill_file(f, "global") is None
+
+
+def test_discover_global_only(tmp_path, monkeypatch):
+    import avadex.skills as skills_mod
+    global_dir = tmp_path / "global"
+    _write_skill(global_dir, "alpha", "name: alpha\ndescription: Alpha skill.")
+    monkeypatch.setattr(skills_mod, "GLOBAL_SKILLS_DIR", global_dir)
+    cwd = tmp_path / "work"
+    cwd.mkdir()  # no skills/ subdir
+    result = skills_mod.discover_skills(cwd)
+    assert set(result) == {"alpha"}
+    assert result["alpha"].source == "global"
+
+
+def test_discover_workdir_overrides_global(tmp_path, monkeypatch):
+    import avadex.skills as skills_mod
+    global_dir = tmp_path / "global"
+    _write_skill(global_dir, "dup", "name: dup\ndescription: Global version.", "GLOBAL BODY")
+    monkeypatch.setattr(skills_mod, "GLOBAL_SKILLS_DIR", global_dir)
+    cwd = tmp_path / "work"
+    _write_skill(cwd / "skills", "dup", "name: dup\ndescription: Workdir version.", "WORKDIR BODY")
+    result = skills_mod.discover_skills(cwd)
+    assert set(result) == {"dup"}
+    assert result["dup"].source == "workdir"
+    assert result["dup"].body == "WORKDIR BODY"
+
+
+def test_discover_malformed_skipped_valid_still_loads(tmp_path, monkeypatch):
+    import avadex.skills as skills_mod
+    global_dir = tmp_path / "global"
+    _write_skill(global_dir, "good", "name: good\ndescription: Good one.")
+    bad = global_dir / "bad"
+    bad.mkdir()
+    (bad / "SKILL.md").write_text("---\nname: bad\n---\nbody\n")  # missing description
+    monkeypatch.setattr(skills_mod, "GLOBAL_SKILLS_DIR", global_dir)
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    result = skills_mod.discover_skills(cwd)
+    assert set(result) == {"good"}
+
+
+def test_discover_missing_dirs_returns_empty(tmp_path, monkeypatch):
+    import avadex.skills as skills_mod
+    monkeypatch.setattr(skills_mod, "GLOBAL_SKILLS_DIR", tmp_path / "nonexistent")
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    assert skills_mod.discover_skills(cwd) == {}
