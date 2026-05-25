@@ -120,13 +120,14 @@ def run_repl(
         registry.register(tool)
 
     mcp_clients = []
-    for entry in cfg.mcp_servers:
-        mc = MCPClient(name=entry["name"], command=entry["command"], args=entry.get("args", []))
+    for s in cfg.mcp_servers:
+        mc = MCPClient(name=s.name, transport=s.transport, command=s.command,
+                       args=s.args, url=s.url, headers=s.headers)
         try:
             mc.start()
             mcp_clients.append(mc)
         except Exception as exc:
-            log.warning("MCP server '%s' failed to start: %s", entry["name"], exc)
+            log.warning("MCP server '%s' failed to start: %s", s.name, exc)
     register_mcp_tools(mcp_clients, registry)
 
     permissions = PermissionManager(allowlist_path)
