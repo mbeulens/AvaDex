@@ -57,6 +57,22 @@ def load_config(path: Path) -> Config:
         ) from exc
 
 
+_ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _interpolate_env(value: str, *, server: str, header: str) -> str:
+    def repl(match: re.Match) -> str:
+        var = match.group(1)
+        try:
+            return os.environ[var]
+        except KeyError:
+            raise ConfigMissing(
+                f"MCP server {server!r} header {header!r} references "
+                f"${{{var}}} but environment variable {var!r} is not set"
+            )
+    return _ENV_RE.sub(repl, value)
+
+
 _VALID_TRANSPORTS = {"stdio", "http", "sse"}
 
 
@@ -80,13 +96,17 @@ def _parse_mcp_servers(raw: list[dict]) -> list[MCPServerConfig]:
             raise ConfigMissing(
                 f"MCP server {name!r} uses {transport} transport but is missing required field 'url'"
             )
+        headers = {
+            key: _interpolate_env(str(val), server=name, header=key)
+            for key, val in entry.get("headers", {}).items()
+        }
         servers.append(MCPServerConfig(
             name=name,
             transport=transport,
             command=entry.get("command", ""),
             args=list(entry.get("args", [])),
             url=entry.get("url", ""),
-            headers=dict(entry.get("headers", {})),
+            headers=headers,
         ))
     return servers
 

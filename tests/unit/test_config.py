@@ -149,3 +149,39 @@ url = "https://x"
 ''')
     with pytest.raises(ConfigMissing, match="transport"):
         load_config(p)
+
+
+def test_mcp_header_env_interpolation(tmp_path, monkeypatch):
+    monkeypatch.setenv("GH_MCP_TOKEN", "secret123")
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "github"
+transport = "http"
+url = "https://mcp.example.com/mcp"
+[mcp_servers.headers]
+Authorization = "Bearer ${GH_MCP_TOKEN}"
+''')
+    cfg = load_config(p)
+    assert cfg.mcp_servers[0].headers["Authorization"] == "Bearer secret123"
+
+
+def test_mcp_header_missing_env_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv("GH_MCP_TOKEN", raising=False)
+    p = tmp_path / "config.toml"
+    p.write_text('''
+ava_url = "u"
+ava_token = "t"
+
+[[mcp_servers]]
+name = "github"
+transport = "http"
+url = "https://mcp.example.com/mcp"
+[mcp_servers.headers]
+Authorization = "Bearer ${GH_MCP_TOKEN}"
+''')
+    with pytest.raises(ConfigMissing, match="GH_MCP_TOKEN"):
+        load_config(p)
