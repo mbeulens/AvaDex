@@ -18,7 +18,7 @@ class Decision(Enum):
     AUTO_DENY = "auto_deny"
 
 
-READ_ONLY_TOOLS = {"read_file"}
+READ_ONLY_TOOLS = {"read_file", "load_skill"}
 
 
 @dataclass

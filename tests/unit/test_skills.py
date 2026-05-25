@@ -141,3 +141,9 @@ def test_load_skill_missing_name_errors():
     tool = make_load_skill_tool({})
     result = tool.handler({})
     assert result.is_error is True
+
+
+def test_load_skill_is_auto_allowed(tmp_path):
+    from avadex.permissions import PermissionManager, Decision
+    pm = PermissionManager(tmp_path / "allowlist.toml")
+    assert pm.check("load_skill", {}) == Decision.AUTO_ALLOW
