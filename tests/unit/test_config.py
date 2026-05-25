@@ -185,3 +185,24 @@ Authorization = "Bearer ${GH_MCP_TOKEN}"
 ''')
     with pytest.raises(ConfigMissing, match="GH_MCP_TOKEN"):
         load_config(p)
+
+
+def test_parse_mcp_servers_honors_env_mapping():
+    from avadex.config import _parse_mcp_servers
+    raw = [{
+        "name": "x", "transport": "http", "url": "https://h",
+        "headers": {"Authorization": "Bearer ${TOK}"},
+    }]
+    servers = _parse_mcp_servers(raw, env={"TOK": "fromdict"})
+    assert servers[0].headers["Authorization"] == "Bearer fromdict"
+
+
+def test_parse_mcp_servers_env_defaults_to_os_environ(monkeypatch):
+    from avadex.config import _parse_mcp_servers
+    monkeypatch.setenv("TOK", "fromenv")
+    raw = [{
+        "name": "x", "transport": "http", "url": "https://h",
+        "headers": {"Authorization": "Bearer ${TOK}"},
+    }]
+    servers = _parse_mcp_servers(raw)  # no env -> falls back to os.environ
+    assert servers[0].headers["Authorization"] == "Bearer fromenv"
