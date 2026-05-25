@@ -74,7 +74,7 @@ def resolve_mcp_servers(cfg: Config, cwd: Path) -> list[MCPServerConfig]:
         return cfg.mcp_servers
     try:
         data = json.loads(mcp_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         raise ConfigMissing(f"could not read {mcp_path}: {exc}") from exc
     env = {**os.environ, **load_dotenv(cwd / DOTENV_FILENAME)}  # .env wins
     return _parse_mcp_servers(claude_to_raw(data), env=env)

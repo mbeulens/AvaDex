@@ -116,3 +116,13 @@ def test_resolve_missing_var_raises(tmp_path, monkeypatch):
     cfg = Config(ava_url="u", ava_token="t")
     with pytest.raises(ConfigMissing, match="TOK"):
         resolve_mcp_servers(cfg, tmp_path)
+
+
+def test_resolve_non_utf8_mcp_json_raises_configmissing(tmp_path):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config, ConfigMissing
+    # Invalid UTF-8 bytes in .mcp.json -> read_text() raises UnicodeDecodeError
+    (tmp_path / ".mcp.json").write_bytes(b"\xff\xfe\x00\x01 not text")
+    cfg = Config(ava_url="u", ava_token="t")
+    with pytest.raises(ConfigMissing):
+        resolve_mcp_servers(cfg, tmp_path)
