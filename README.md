@@ -115,6 +115,37 @@ url = "https://old.example.com/sse"
 `transport` defaults to `"stdio"`, so existing `command`/`args` entries are
 unchanged. A `${VAR}` that is not set in the environment is a startup error.
 
+### Per-directory MCP servers (`.mcp.json`)
+
+If the directory you launch AvaDex from contains a `.mcp.json` (the same format
+Claude Code uses), AvaDex loads **only** those servers for that run and ignores
+the `mcp_servers` in your global config. This lets you keep a small, task-scoped
+subset of servers per working directory.
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${GITHUB_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+`type` maps to AvaDex's transport (`stdio` / `http` / `sse`, defaulting to
+`stdio`). A sibling `.env` file in the same directory supplies values for
+`${VAR}` references in headers:
+
+```
+GITHUB_MCP_TOKEN=ghp_xxx
+```
+
+The `.env` **wins** over the process environment, and its values are used
+**only** for MCP header auth — they are not exported to commands the agent runs.
+A malformed `.mcp.json` or an unset `${VAR}` is a startup error.
+
 ## Security
 
 **AvaDex runs all tools — including `bash`, `bash_bg`, `write_file`,

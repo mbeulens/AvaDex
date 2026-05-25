@@ -3,6 +3,14 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-05-26
+
+### Added
+- Per-directory MCP config: a `.mcp.json` (Claude Code format) in the working
+  directory loads only those servers for that run, replacing the global
+  `mcp_servers`. A sibling `.env` resolves `${VAR}` header secrets, wins over the
+  process environment, and is scoped to MCP auth only.
+
 ## [0.2.3] — 2026-05-25
 
 ### Added
