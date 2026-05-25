@@ -45,3 +45,74 @@ def test_claude_to_raw_maps_type_to_transport():
 def test_claude_to_raw_empty_returns_empty_list():
     from avadex.mcp_workdir import claude_to_raw
     assert claude_to_raw({}) == []
+
+
+HTTP_JSON = (
+    '{"mcpServers": {"r": {"type": "http", "url": "https://h",'
+    ' "headers": {"Authorization": "Bearer ${TOK}"}}}}'
+)
+
+
+def test_resolve_no_mcp_json_returns_global(tmp_path):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config, MCPServerConfig
+    cfg = Config(ava_url="u", ava_token="t",
+                 mcp_servers=[MCPServerConfig(name="g", command="x")])
+    result = resolve_mcp_servers(cfg, tmp_path)
+    assert result is cfg.mcp_servers
+    assert [s.name for s in result] == ["g"]
+
+
+def test_resolve_loads_workdir_servers(tmp_path):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config
+    (tmp_path / ".mcp.json").write_text(
+        '{"mcpServers": {"remote": {"type": "http", "url": "https://h"}}}'
+    )
+    cfg = Config(ava_url="u", ava_token="t")
+    result = resolve_mcp_servers(cfg, tmp_path)
+    assert len(result) == 1
+    assert result[0].name == "remote"
+    assert result[0].transport == "http"
+    assert result[0].url == "https://h"
+
+
+def test_resolve_dotenv_wins_over_os_environ(tmp_path, monkeypatch):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config
+    monkeypatch.setenv("TOK", "from_os")
+    (tmp_path / ".env").write_text("TOK=from_dotenv\n")
+    (tmp_path / ".mcp.json").write_text(HTTP_JSON)
+    cfg = Config(ava_url="u", ava_token="t")
+    result = resolve_mcp_servers(cfg, tmp_path)
+    assert result[0].headers["Authorization"] == "Bearer from_dotenv"
+
+
+def test_resolve_dotenv_only_var(tmp_path, monkeypatch):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config
+    monkeypatch.delenv("TOK", raising=False)
+    (tmp_path / ".env").write_text("TOK=only_dotenv\n")
+    (tmp_path / ".mcp.json").write_text(HTTP_JSON)
+    cfg = Config(ava_url="u", ava_token="t")
+    result = resolve_mcp_servers(cfg, tmp_path)
+    assert result[0].headers["Authorization"] == "Bearer only_dotenv"
+
+
+def test_resolve_malformed_json_raises(tmp_path):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config, ConfigMissing
+    (tmp_path / ".mcp.json").write_text("{ not valid json ")
+    cfg = Config(ava_url="u", ava_token="t")
+    with pytest.raises(ConfigMissing):
+        resolve_mcp_servers(cfg, tmp_path)
+
+
+def test_resolve_missing_var_raises(tmp_path, monkeypatch):
+    from avadex.mcp_workdir import resolve_mcp_servers
+    from avadex.config import Config, ConfigMissing
+    monkeypatch.delenv("TOK", raising=False)
+    (tmp_path / ".mcp.json").write_text(HTTP_JSON)
+    cfg = Config(ava_url="u", ava_token="t")
+    with pytest.raises(ConfigMissing, match="TOK"):
+        resolve_mcp_servers(cfg, tmp_path)

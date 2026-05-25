@@ -1,5 +1,14 @@
 from __future__ import annotations
+import json
+import os
 from pathlib import Path
+
+from avadex.config import (
+    Config,
+    MCPServerConfig,
+    ConfigMissing,
+    _parse_mcp_servers,
+)
 
 MCP_JSON_FILENAME = ".mcp.json"
 DOTENV_FILENAME = ".env"
@@ -51,3 +60,21 @@ def claude_to_raw(mcp_json: dict) -> list[dict]:
             "headers": entry.get("headers", {}),
         })
     return raw
+
+
+def resolve_mcp_servers(cfg: Config, cwd: Path) -> list[MCPServerConfig]:
+    """If `cwd/.mcp.json` exists, load ONLY its servers (Claude format),
+    interpolating headers with `os.environ` overlaid by `cwd/.env` (.env wins).
+    Otherwise return `cfg.mcp_servers` unchanged.
+
+    The merged env is used only here; it is never written into os.environ.
+    """
+    mcp_path = cwd / MCP_JSON_FILENAME
+    if not mcp_path.exists():
+        return cfg.mcp_servers
+    try:
+        data = json.loads(mcp_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ConfigMissing(f"could not read {mcp_path}: {exc}") from exc
+    env = {**os.environ, **load_dotenv(cwd / DOTENV_FILENAME)}  # .env wins
+    return _parse_mcp_servers(claude_to_raw(data), env=env)
