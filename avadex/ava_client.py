@@ -62,6 +62,11 @@ class AvaClient:
             body = response.text[:500]
             log.warning("POST /api/v1/messages HTTP %d: %s", response.status_code, body[:200])
             low = body.lower()
+            if "does not support tools" in low:
+                raise AvaError(
+                    f"model {model!r} does not support tool calling — "
+                    f"switch to a tool-capable model with /model"
+                )
             if "context" in low and ("length" in low or "too" in low or "exceed" in low):
                 raise ContextOverflow(f"HTTP {response.status_code}: {body}")
             raise AvaError(f"HTTP {response.status_code}: {body}")

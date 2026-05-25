@@ -14,6 +14,35 @@ from avadex.spinner import Spinner
 MAX_ITERATIONS = 25
 
 
+def _unexecuted_tool_call_name(text: str, tool_names) -> "str | None":
+    """If `text` is just a tool-call-shaped JSON object naming a known tool,
+    return that tool name; otherwise None.
+
+    Detects models that can't do native tool-calling and instead emit the call
+    as plain text (e.g. `{"name": "write_file", "arguments": {...}}`), which
+    never executes. Conservative: only fires when the text IS the JSON object,
+    so it won't nag on normal answers."""
+    import json
+    s = text.strip()
+    if s.startswith("```"):
+        s = s.strip("`").strip()
+        if s[:4].lower() == "json":
+            s = s[4:].strip()
+    if not (s.startswith("{") and s.endswith("}")):
+        return None
+    try:
+        obj = json.loads(s)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    name = obj.get("name")
+    has_args = any(isinstance(obj.get(k), dict) for k in ("arguments", "parameters", "input"))
+    if isinstance(name, str) and name in set(tool_names) and has_args:
+        return name
+    return None
+
+
 class AgentLoop:
     def __init__(
         self,
@@ -88,6 +117,7 @@ class AgentLoop:
             self.messages.append({"role": "assistant", "content": serialized})
 
             if response.stop_reason != "tool_use":
+                self._warn_if_tool_call_as_text(response.content, renderer)
                 return
 
             # Detect 3-in-a-row identical assistant turns.
@@ -103,6 +133,19 @@ class AgentLoop:
             self.messages.append({"role": "user", "content": tool_results})
 
         renderer.error("max iterations reached without end_turn")
+
+    def _warn_if_tool_call_as_text(self, content: list, renderer: Renderer) -> None:
+        names = set(self.registry.names())
+        for block in content:
+            if isinstance(block, TextBlock) and block.text:
+                tool = _unexecuted_tool_call_name(block.text, names)
+                if tool is not None:
+                    renderer.error(
+                        f"model '{self.model}' replied with a '{tool}' tool call as "
+                        f"text instead of running it — this model likely doesn't "
+                        f"support tool calling. Switch with /model."
+                    )
+                    return
 
     def _signature_for_repeat_detection(self, content: list) -> str:
         """Build a stable string from response content for loop detection.
