@@ -146,6 +146,33 @@ The `.env` **wins** over the process environment, and its values are used
 **only** for MCP header auth — they are not exported to commands the agent runs.
 A malformed `.mcp.json` or an unset `${VAR}` is a startup error.
 
+### Skills
+
+Skills are focused markdown playbooks AvaDex can load on demand. At startup it
+discovers them from two places:
+
+- **Global:** `~/.config/avadex/skills/<name>/SKILL.md`
+- **Workdir:** `<cwd>/skills/<name>/SKILL.md` (a workdir skill overrides a
+  global one with the same name)
+
+Each `SKILL.md` has simple frontmatter plus a markdown body:
+
+```
+---
+name: create-partner
+description: Use when the user asks to create or onboard a partner in Syntec.
+---
+
+<the full playbook the agent should follow>
+```
+
+AvaDex lists each skill's `name` and `description` in the system prompt and
+exposes a `load_skill` tool. When a request matches a skill, the agent calls
+`load_skill` to read the full body before acting (the tool is read-only and
+runs without a permission prompt). Skills are independent of MCP servers —
+pair a skill with a `.mcp.json` in the same directory when it needs specific
+tools.
+
 ## Security
 
 **AvaDex runs all tools — including `bash`, `bash_bg`, `write_file`,
