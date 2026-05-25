@@ -6,6 +6,7 @@ from pathlib import Path
 
 from avadex.config import save_token, load_config, ConfigMissing
 from avadex.mcp_workdir import resolve_mcp_servers
+from avadex.skills import discover_skills, render_skill_index, make_load_skill_tool
 from avadex.ava_client import AvaClient, AvaError, TokenExpired
 from avadex.permissions import PermissionManager
 from avadex.tools.registry import ToolRegistry
@@ -45,7 +46,7 @@ def _resolve_initial_model(cfg, client) -> str:
     return info.get("default") or FALLBACK_MODEL
 
 
-def _build_system_prompt(cfg) -> str:
+def _default_or_custom_prompt(cfg) -> str:
     if cfg.system_prompt_path:
         try:
             return Path(cfg.system_prompt_path).read_text()
@@ -89,6 +90,13 @@ def _build_system_prompt(cfg) -> str:
     )
 
 
+def _build_system_prompt(cfg, skill_index: str = "") -> str:
+    base = _default_or_custom_prompt(cfg)
+    if skill_index:
+        base = base + "\n\n" + skill_index
+    return base
+
+
 def run_repl(
     config_path: Path = DEFAULT_CONFIG,
     allowlist_path: Path = DEFAULT_ALLOWLIST,
@@ -121,6 +129,8 @@ def run_repl(
         registry.register(tool)
 
     cwd = Path.cwd()
+    skills = discover_skills(cwd)
+    registry.register(make_load_skill_tool(skills))
     try:
         mcp_specs = resolve_mcp_servers(cfg, cwd)
     except ConfigMissing as exc:
@@ -145,7 +155,7 @@ def run_repl(
     initial_model = _resolve_initial_model(cfg, client)
     agent = AgentLoop(
         client=client, registry=registry, permissions=permissions,
-        system_prompt=_build_system_prompt(cfg),
+        system_prompt=_build_system_prompt(cfg, render_skill_index(skills)),
         max_context_tokens=cfg.max_context_tokens,
         model=initial_model,
         prompt_user=build_terminal_prompter(),
