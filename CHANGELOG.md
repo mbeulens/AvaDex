@@ -3,6 +3,13 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-05-25
+
+### Added
+- MCP servers can now be reached over **Streamable HTTP** (`transport = "http"`)
+  and legacy **SSE** (`transport = "sse"`), in addition to stdio. Remote servers
+  accept a `[mcp_servers.headers]` table with `${ENV_VAR}` interpolation for auth.
+
 ## [0.2.0] — 2026-05-19
 
 First minor release. Triples the tool surface, adds polish and safety,

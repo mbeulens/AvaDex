@@ -91,6 +91,30 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/you"]
 ```
 
+MCP servers can also be reached over HTTP. Set `transport` to `"http"`
+(Streamable HTTP, recommended) or `"sse"` (legacy) and provide a `url`.
+A `[mcp_servers.headers]` table supplies request headers; values may reference
+environment variables with `${VAR}` so secrets stay out of the config file:
+
+```toml
+# Streamable HTTP with bearer auth from the environment
+[[mcp_servers]]
+name = "github"
+transport = "http"
+url = "https://mcp.example.com/mcp"
+[mcp_servers.headers]
+Authorization = "Bearer ${GITHUB_MCP_TOKEN}"
+
+# legacy SSE
+[[mcp_servers]]
+name = "legacy"
+transport = "sse"
+url = "https://old.example.com/sse"
+```
+
+`transport` defaults to `"stdio"`, so existing `command`/`args` entries are
+unchanged. A `${VAR}` that is not set in the environment is a startup error.
+
 ## Security
 
 **AvaDex runs all tools — including `bash`, `bash_bg`, `write_file`,
