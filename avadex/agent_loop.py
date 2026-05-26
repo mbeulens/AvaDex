@@ -141,9 +141,10 @@ class AgentLoop:
                 tool = _unexecuted_tool_call_name(block.text, names)
                 if tool is not None:
                     renderer.error(
-                        f"model '{self.model}' replied with a '{tool}' tool call as "
-                        f"text instead of running it — this model likely doesn't "
-                        f"support tool calling. Switch with /model."
+                        f"model '{self.model}' returned a '{tool}' tool call as text "
+                        f"— it was NOT executed. If this model should support tools, "
+                        f"re-pull it (ollama pull) or update Ollama; otherwise switch "
+                        f"with /model."
                     )
                     return
 
