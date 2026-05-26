@@ -46,6 +46,17 @@ def _resolve_initial_model(cfg, client) -> str:
     return info.get("default") or FALLBACK_MODEL
 
 
+def _describe_exc(exc: BaseException) -> str:
+    """Readable cause(s) of an exception. Unwraps ExceptionGroups and falls back
+    to repr when str() is empty (e.g. a bare TimeoutError() from a connect
+    timeout), so MCP start failures never log a blank message."""
+    sub = getattr(exc, "exceptions", None)
+    if sub:
+        return "; ".join(_describe_exc(e) for e in sub)
+    text = str(exc).strip()
+    return text or repr(exc)
+
+
 def _default_or_custom_prompt(cfg) -> str:
     if cfg.system_prompt_path:
         try:
@@ -148,7 +159,7 @@ def run_repl(
             mc.start()
             mcp_clients.append(mc)
         except Exception as exc:
-            log.warning("MCP server '%s' failed to start: %s", s.name, exc)
+            log.warning("MCP server '%s' failed to start: %s", s.name, _describe_exc(exc))
     register_mcp_tools(mcp_clients, registry)
 
     permissions = PermissionManager(allowlist_path)
