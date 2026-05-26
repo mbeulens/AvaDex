@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import re
 import threading
 from typing import Optional
 
@@ -148,7 +149,12 @@ def register_mcp_tools(clients: list, registry: ToolRegistry) -> None:
     namespacing names as '<server-name>.<tool-name>' to avoid collisions."""
     for client in clients:
         for tool in client.list_tools():
-            qualified = f"{client.name}.{tool['name']}"
+            # Sanitize to valid tool-call identifier chars: the OpenAI/Ollama
+            # function-calling convention only allows [A-Za-z0-9_-], so a '.'
+            # separator (or any other char) gets mangled by the model and the
+            # returned call no longer matches the registry. The real MCP call
+            # still uses inner_name below, so this only affects the exposed name.
+            qualified = re.sub(r"[^A-Za-z0-9_]", "_", f"{client.name}.{tool['name']}")
             inner_name = tool["name"]
             # Capture client and inner_name in default args to avoid late binding
             def handler(args, _c=client, _n=inner_name):

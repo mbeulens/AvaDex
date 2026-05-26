@@ -42,8 +42,8 @@ def test_mcp_register_into_registry_with_prefix(tmp_path, monkeypatch):
     reg = ToolRegistry()
     register_mcp_tools([FakeMCP()], reg)
     # Tools are namespaced with the server name
-    assert "fs.read" in reg.names()
-    result = reg.dispatch("fs.read", {"path": "/x"})
+    assert "fs_read" in reg.names()
+    result = reg.dispatch("fs_read", {"path": "/x"})
     assert "called read" in result.content
 
 
@@ -79,17 +79,42 @@ def test_mcp_crash_flips_unhealthy_and_hides_tools(tmp_path, capsys):
     client = FlakyMCP()
     register_mcp_tools([client], reg)
     # Initially the tool is visible
-    assert "flaky.boom" in reg.names()
+    assert "flaky_boom" in reg.names()
     # Invoke it — it errors and flips the client
-    result = reg.dispatch("flaky.boom", {})
+    result = reg.dispatch("flaky_boom", {})
     assert result.is_error
     # Now the tool is filtered out
-    assert "flaky.boom" not in reg.names()
-    assert not any(s["name"] == "flaky.boom" for s in reg.schemas())
+    assert "flaky_boom" not in reg.names()
+    assert not any(s["name"] == "flaky_boom" for s in reg.schemas())
     # Warning was emitted
     err = capsys.readouterr().err
     assert "flaky" in err
     assert "crashed" in err
+
+
+def test_mcp_register_sanitizes_tool_names():
+    """Namespaced names are sanitized to valid function-name chars (no dots or
+    hyphens) so models can reproduce them; the real MCP call still uses the
+    original tool name."""
+    from avadex.tools.mcp import register_mcp_tools
+    from avadex.tools.registry import ToolResult
+
+    class FakeMCP:
+        name = "syntec-enterprise-landen"
+        is_healthy = True
+        def list_tools(self):
+            return [{"name": "s_cty_list", "description": "", "input_schema": {}}]
+        def call_tool(self, name, args):
+            return ToolResult(content=f"called {name}")
+
+    reg = ToolRegistry()
+    register_mcp_tools([FakeMCP()], reg)
+    assert "syntec_enterprise_landen_s_cty_list" in reg.names()
+    # no dots or hyphens survive in any registered name
+    assert all("." not in n and "-" not in n for n in reg.names())
+    # dispatch by the sanitized name still invokes the ORIGINAL tool name
+    result = reg.dispatch("syntec_enterprise_landen_s_cty_list", {})
+    assert "called s_cty_list" in result.content
 
 
 def test_mcp_client_initializes_healthy():

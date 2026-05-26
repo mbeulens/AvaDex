@@ -35,7 +35,9 @@ def test_load_uses_defaults_for_unset(tmp_path):
     cfg = load_config(p)
     # default_model = "" means "ask Ava on startup"; cli.run_repl resolves it.
     assert cfg.default_model == ""
-    assert cfg.max_context_tokens == 3500
+    assert cfg.max_context_tokens == 16000
+    assert cfg.max_response_tokens == 4096
+    assert cfg.max_iterations == 50
     assert cfg.mcp_servers == []
 
 
@@ -185,3 +187,24 @@ Authorization = "Bearer ${GH_MCP_TOKEN}"
 ''')
     with pytest.raises(ConfigMissing, match="GH_MCP_TOKEN"):
         load_config(p)
+
+
+def test_parse_mcp_servers_honors_env_mapping():
+    from avadex.config import _parse_mcp_servers
+    raw = [{
+        "name": "x", "transport": "http", "url": "https://h",
+        "headers": {"Authorization": "Bearer ${TOK}"},
+    }]
+    servers = _parse_mcp_servers(raw, env={"TOK": "fromdict"})
+    assert servers[0].headers["Authorization"] == "Bearer fromdict"
+
+
+def test_parse_mcp_servers_env_defaults_to_os_environ(monkeypatch):
+    from avadex.config import _parse_mcp_servers
+    monkeypatch.setenv("TOK", "fromenv")
+    raw = [{
+        "name": "x", "transport": "http", "url": "https://h",
+        "headers": {"Authorization": "Bearer ${TOK}"},
+    }]
+    servers = _parse_mcp_servers(raw)  # no env -> falls back to os.environ
+    assert servers[0].headers["Authorization"] == "Bearer fromenv"

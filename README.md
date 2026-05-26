@@ -115,6 +115,64 @@ url = "https://old.example.com/sse"
 `transport` defaults to `"stdio"`, so existing `command`/`args` entries are
 unchanged. A `${VAR}` that is not set in the environment is a startup error.
 
+### Per-directory MCP servers (`.mcp.json`)
+
+If the directory you launch AvaDex from contains a `.mcp.json` (the same format
+Claude Code uses), AvaDex loads **only** those servers for that run and ignores
+the `mcp_servers` in your global config. This lets you keep a small, task-scoped
+subset of servers per working directory.
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${GITHUB_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+`type` maps to AvaDex's transport (`stdio` / `http` / `sse`, defaulting to
+`stdio`). A sibling `.env` file in the same directory supplies values for
+`${VAR}` references in headers:
+
+```
+GITHUB_MCP_TOKEN=ghp_xxx
+```
+
+The `.env` **wins** over the process environment, and its values are used
+**only** for MCP header auth — they are not exported to commands the agent runs.
+A malformed `.mcp.json` or an unset `${VAR}` is a startup error.
+
+### Skills
+
+Skills are focused markdown playbooks AvaDex can load on demand. At startup it
+discovers them from two places:
+
+- **Global:** `~/.config/avadex/skills/<name>/SKILL.md`
+- **Workdir:** `<cwd>/skills/<name>/SKILL.md` (a workdir skill overrides a
+  global one with the same name)
+
+Each `SKILL.md` has simple frontmatter plus a markdown body:
+
+```
+---
+name: create-partner
+description: Use when the user asks to create or onboard a partner in Syntec.
+---
+
+<the full playbook the agent should follow>
+```
+
+AvaDex lists each skill's `name` and `description` in the system prompt and
+exposes a `load_skill` tool. When a request matches a skill, the agent calls
+`load_skill` to read the full body before acting (the tool is read-only and
+runs without a permission prompt). Skills are independent of MCP servers —
+pair a skill with a `.mcp.json` in the same directory when it needs specific
+tools.
+
 ## Security
 
 **AvaDex runs all tools — including `bash`, `bash_bg`, `write_file`,

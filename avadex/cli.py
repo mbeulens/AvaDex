@@ -5,6 +5,8 @@ from getpass import getpass
 from pathlib import Path
 
 from avadex.config import save_token, load_config, ConfigMissing
+from avadex.mcp_workdir import resolve_mcp_servers
+from avadex.skills import discover_skills, render_skill_index, make_load_skill_tool
 from avadex.ava_client import AvaClient, AvaError, TokenExpired
 from avadex.permissions import PermissionManager
 from avadex.tools.registry import ToolRegistry
@@ -44,7 +46,18 @@ def _resolve_initial_model(cfg, client) -> str:
     return info.get("default") or FALLBACK_MODEL
 
 
-def _build_system_prompt(cfg) -> str:
+def _describe_exc(exc: BaseException) -> str:
+    """Readable cause(s) of an exception. Unwraps ExceptionGroups and falls back
+    to repr when str() is empty (e.g. a bare TimeoutError() from a connect
+    timeout), so MCP start failures never log a blank message."""
+    sub = getattr(exc, "exceptions", None)
+    if sub:
+        return "; ".join(_describe_exc(e) for e in sub)
+    text = str(exc).strip()
+    return text or repr(exc)
+
+
+def _default_or_custom_prompt(cfg) -> str:
     if cfg.system_prompt_path:
         try:
             return Path(cfg.system_prompt_path).read_text()
@@ -79,6 +92,13 @@ def _build_system_prompt(cfg) -> str:
         "- Create a GitHub repo: `gh repo create <name> --public --confirm`\n"
         "- Read a PR: `gh pr view <number>`\n"
         "- Check service status: `systemctl status <service>`\n\n"
+        "USE TOOL RESULTS FAITHFULLY. When a tool returns data, answer from "
+        "that data directly — don't just describe its shape or give a vague "
+        "summary. If the user asks for a table or list, render the actual rows "
+        "as a Markdown table. If a tool result is paginated (it has page / "
+        "limit / offset fields and more rows remain), call the tool again for "
+        "the next pages before answering 'all'. Always reply in the same "
+        "language the user wrote in.\n\n"
         "Don't ask 'should I proceed?' after presenting a plan — just "
         "proceed. The user will interrupt if they disagree. Be concise. "
         "When a tool fails, read the error and adapt — don't repeat the same "
@@ -86,6 +106,13 @@ def _build_system_prompt(cfg) -> str:
         "several changes for one file. Use todo_write to plan multi-step "
         "work so the user can see progress."
     )
+
+
+def _build_system_prompt(cfg, skill_index: str = "") -> str:
+    base = _default_or_custom_prompt(cfg)
+    if skill_index:
+        base = base + "\n\n" + skill_index
+    return base
 
 
 def run_repl(
@@ -119,25 +146,39 @@ def run_repl(
     for tool in ALL_BUILTINS:
         registry.register(tool)
 
+    cwd = Path.cwd()
+    skills = discover_skills(cwd)
+    registry.register(make_load_skill_tool(skills))
+    try:
+        mcp_specs = resolve_mcp_servers(cfg, cwd)
+    except ConfigMissing as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if (cwd / ".mcp.json").exists():
+        print(f"Loaded {len(mcp_specs)} MCP server(s) from ./.mcp.json",
+              file=sys.stderr)
+
     mcp_clients = []
-    for s in cfg.mcp_servers:
+    for s in mcp_specs:
         mc = MCPClient(name=s.name, transport=s.transport, command=s.command,
                        args=s.args, url=s.url, headers=s.headers)
         try:
             mc.start()
             mcp_clients.append(mc)
         except Exception as exc:
-            log.warning("MCP server '%s' failed to start: %s", s.name, exc)
+            log.warning("MCP server '%s' failed to start: %s", s.name, _describe_exc(exc))
     register_mcp_tools(mcp_clients, registry)
 
     permissions = PermissionManager(allowlist_path)
     initial_model = _resolve_initial_model(cfg, client)
     agent = AgentLoop(
         client=client, registry=registry, permissions=permissions,
-        system_prompt=_build_system_prompt(cfg),
+        system_prompt=_build_system_prompt(cfg, render_skill_index(skills)),
         max_context_tokens=cfg.max_context_tokens,
+        max_response_tokens=cfg.max_response_tokens,
         model=initial_model,
         prompt_user=build_terminal_prompter(),
+        max_iterations=cfg.max_iterations,
     )
     # Expose registry + permissions on agent for /tools and /allow slash commands
     agent.registry = registry
