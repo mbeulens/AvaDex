@@ -175,6 +175,7 @@ def run_repl(
         client=client, registry=registry, permissions=permissions,
         system_prompt=_build_system_prompt(cfg, render_skill_index(skills)),
         max_context_tokens=cfg.max_context_tokens,
+        max_response_tokens=cfg.max_response_tokens,
         model=initial_model,
         prompt_user=build_terminal_prompter(),
     )

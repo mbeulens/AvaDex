@@ -35,7 +35,8 @@ def test_load_uses_defaults_for_unset(tmp_path):
     cfg = load_config(p)
     # default_model = "" means "ask Ava on startup"; cli.run_repl resolves it.
     assert cfg.default_model == ""
-    assert cfg.max_context_tokens == 3500
+    assert cfg.max_context_tokens == 16000
+    assert cfg.max_response_tokens == 4096
     assert cfg.mcp_servers == []
 
 
