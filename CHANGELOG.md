@@ -3,6 +3,55 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12] — 2026-05-27
+
+### Changed
+- Agent iteration cap raised from 25 to 50 and exposed as `max_iterations` in
+  `config.toml`, so multi-step tasks (e.g. paginating then writing a file) no
+  longer abort mid-task. Repeat-detection still guards genuine loops.
+
+## [0.2.11] — 2026-05-27
+
+### Changed
+- Larger token budget for coding sessions: `max_context_tokens` 3500 → 16000 and
+  `max_response_tokens` 2048 → 4096; both now configurable in `config.toml`.
+
+## [0.2.10] — 2026-05-26
+
+### Changed
+- System prompt now tells the model to render requested tables/lists from tool
+  results (not just describe them), page through paginated results before
+  answering "all", and reply in the user's language.
+
+## [0.2.9] — 2026-05-26
+
+### Fixed
+- MCP tool names are sanitized to valid function-call identifiers (no dots or
+  hyphens) so models can reproduce them — fixes "unknown tool" failures on
+  namespaced MCP tools.
+
+## [0.2.8] — 2026-05-26
+
+### Fixed
+- MCP server start failures now log their real cause (ExceptionGroups unwrapped,
+  `repr` for empty-message errors such as a connect `TimeoutError`) instead of a
+  blank message.
+
+## [0.2.7] — 2026-05-26
+
+### Changed
+- Reworded the "tool call returned as text" warning so it no longer asserts the
+  model lacks tool support; it suggests re-pulling the model, updating Ollama, or
+  switching with `/model`.
+
+## [0.2.6] — 2026-05-26
+
+### Added
+- Clear feedback when the selected model can't use tools: warns when a model
+  emits a tool call as plain text (so nothing executes), and turns Ollama's
+  "does not support tools" error into an actionable "switch with `/model`"
+  message.
+
 ## [0.2.5] — 2026-05-26
 
 ### Added
