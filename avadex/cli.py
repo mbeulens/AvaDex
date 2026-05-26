@@ -178,6 +178,7 @@ def run_repl(
         max_response_tokens=cfg.max_response_tokens,
         model=initial_model,
         prompt_user=build_terminal_prompter(),
+        max_iterations=cfg.max_iterations,
     )
     # Expose registry + permissions on agent for /tools and /allow slash commands
     agent.registry = registry

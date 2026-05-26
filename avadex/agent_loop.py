@@ -11,7 +11,7 @@ from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.renderer import Renderer
 from avadex.spinner import Spinner
 
-MAX_ITERATIONS = 25
+MAX_ITERATIONS = 50
 
 
 def _unexecuted_tool_call_name(text: str, tool_names) -> "str | None":
@@ -54,6 +54,7 @@ class AgentLoop:
         max_response_tokens: int = 2048,
         model: str = "gemma4",
         prompt_user=None,
+        max_iterations: int = MAX_ITERATIONS,
     ):
         self.client = client
         self.registry = registry
@@ -62,6 +63,7 @@ class AgentLoop:
         self.max_context_tokens = max_context_tokens
         self.max_response_tokens = max_response_tokens
         self.model = model
+        self.max_iterations = max_iterations
         self.messages: list[dict] = []
         self.prompt_user = prompt_user or (lambda tool, args: ("deny", None))
 
@@ -76,7 +78,7 @@ class AgentLoop:
         self.messages = prune(self.messages, max_tokens=self.max_context_tokens)
         recent_signatures: list[str] = []
 
-        for _ in range(MAX_ITERATIONS):
+        for _ in range(self.max_iterations):
             try:
                 try:
                     with Spinner():

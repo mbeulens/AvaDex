@@ -37,6 +37,7 @@ def test_load_uses_defaults_for_unset(tmp_path):
     assert cfg.default_model == ""
     assert cfg.max_context_tokens == 16000
     assert cfg.max_response_tokens == 4096
+    assert cfg.max_iterations == 50
     assert cfg.mcp_servers == []
 
 

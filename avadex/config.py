@@ -33,6 +33,7 @@ class Config:
     default_model: str = ""  # empty = resolve from Ava's /api/v1/models on startup
     max_context_tokens: int = 16000   # how much conversation/history to send (client-side prune)
     max_response_tokens: int = 4096   # max tokens the model may generate per turn
+    max_iterations: int = 50          # max tool-use round-trips per user turn
     system_prompt_path: str = ""
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
 
@@ -50,6 +51,7 @@ def load_config(path: Path) -> Config:
             default_model=data.get("default_model", ""),
             max_context_tokens=data.get("max_context_tokens", 16000),
             max_response_tokens=data.get("max_response_tokens", 4096),
+            max_iterations=data.get("max_iterations", 50),
             system_prompt_path=data.get("system_prompt_path", ""),
             mcp_servers=_parse_mcp_servers(data.get("mcp_servers", [])),
         )
