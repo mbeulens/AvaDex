@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 
 SAFETY_FACTOR = 1.2
@@ -12,6 +13,50 @@ def estimate_tokens(thing: str | dict | list) -> int:
     else:
         raw = json.dumps(thing, separators=(",", ":"))
     return int(len(raw) / 4 * SAFETY_FACTOR)
+
+
+def _protected_start(n: int, keep_recent: int) -> int:
+    """Index at/after which messages are protected from modification."""
+    return max(0, n - keep_recent)
+
+
+def _result_index(messages: list[dict], tool_use_id: str):
+    """Return (message_index, result_block) for a tool_use_id, or (None, None)."""
+    for i, m in enumerate(messages):
+        c = m.get("content")
+        if isinstance(c, list):
+            for b in c:
+                if b.get("type") == "tool_result" and b.get("tool_use_id") == tool_use_id:
+                    return i, b
+    return None, None
+
+
+def _stub_superseded_reads(messages: list[dict], keep_recent: int) -> list[dict]:
+    """Replace the result body of every read_file except the latest per path."""
+    protected = _protected_start(len(messages), keep_recent)
+    reads: list[tuple[int, str, str]] = []  # (msg_index, tool_use_id, path)
+    for i, m in enumerate(messages):
+        if m.get("role") != "assistant":
+            continue
+        c = m.get("content")
+        if not isinstance(c, list):
+            continue
+        for b in c:
+            if b.get("type") == "tool_use" and b.get("name") == "read_file":
+                path = (b.get("input") or {}).get("path")
+                if path and b.get("id"):
+                    reads.append((i, b["id"], path))
+    latest: dict[str, str] = {}
+    for _, tid, path in reads:
+        latest[path] = tid  # later entries win → highest-index read per path
+    for _, tid, path in reads:
+        if tid == latest[path]:
+            continue
+        ri, block = _result_index(messages, tid)
+        if ri is None or ri >= protected:
+            continue
+        block["content"] = f"[superseded by a later read of {path}]"
+    return messages
 
 
 def _tool_use_ids(message: dict) -> set[str]:

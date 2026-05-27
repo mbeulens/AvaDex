@@ -67,3 +67,37 @@ def test_prune_never_returns_empty():
     out = prune(messages, max_tokens=10)
     # Last message is always kept even if it exceeds budget
     assert len(out) == 1
+
+
+def test_stub_superseded_reads_keeps_only_latest():
+    from avadex.context import _stub_superseded_reads
+    messages = [
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r1", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r1", "content": "OLD CONTENT", "is_error": False}]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r2", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r2", "content": "NEW CONTENT", "is_error": False}]},
+    ]
+    out = _stub_superseded_reads(messages, keep_recent=0)
+    assert out[1]["content"][0]["content"] == "[superseded by a later read of /a.py]"
+    assert out[3]["content"][0]["content"] == "NEW CONTENT"
+
+
+def test_stub_superseded_reads_respects_recent_window():
+    from avadex.context import _stub_superseded_reads
+    messages = [
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r1", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r1", "content": "OLD CONTENT", "is_error": False}]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r2", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r2", "content": "NEW CONTENT", "is_error": False}]},
+    ]
+    # keep_recent=4 protects everything → no stubbing
+    out = _stub_superseded_reads(messages, keep_recent=4)
+    assert out[1]["content"][0]["content"] == "OLD CONTENT"
