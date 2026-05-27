@@ -6,12 +6,26 @@ from avadex.types import (
 )
 from avadex.tools.registry import ToolRegistry, ToolResult
 from avadex.permissions import PermissionManager
-from avadex.context import prune
+from avadex.context import prune, fit_context
 from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.renderer import Renderer
 from avadex.spinner import Spinner
 
 MAX_ITERATIONS = 50
+
+COMPACTION_SYSTEM_PROMPT = (
+    "You are compacting an AI agent's conversation history to save context. "
+    "Write a concise summary of the conversation so far that faithfully preserves: "
+    "(1) the user's goals and original requests; "
+    "(2) key facts and data discovered — IDs, API results, filenames, numbers; "
+    "(3) decisions made and the reasoning behind them; "
+    "(4) pending next steps and outstanding TODOs. "
+    "Be specific. Do not invent information. Output only the summary."
+)
+COMPACTION_INSTRUCTION = (
+    "Summarize the conversation above per your instructions, preserving goals, "
+    "key facts/data, decisions, and pending next steps."
+)
 
 
 def _unexecuted_tool_call_name(text: str, tool_names) -> "str | None":
@@ -55,6 +69,9 @@ class AgentLoop:
         model: str = "gemma4",
         prompt_user=None,
         max_iterations: int = MAX_ITERATIONS,
+        compaction_threshold: float = 0.8,
+        large_output_tokens: int = 1000,
+        keep_recent: int = 6,
     ):
         self.client = client
         self.registry = registry
@@ -64,21 +81,50 @@ class AgentLoop:
         self.max_response_tokens = max_response_tokens
         self.model = model
         self.max_iterations = max_iterations
+        self.compaction_threshold = compaction_threshold
+        self.large_output_tokens = large_output_tokens
+        self.keep_recent = keep_recent
         self.messages: list[dict] = []
         self.prompt_user = prompt_user or (lambda tool, args: ("deny", None))
 
     def clear(self):
         self.messages = []
 
+    def _fit(self) -> list[dict]:
+        return fit_context(
+            self.messages,
+            max_tokens=self.max_context_tokens,
+            threshold=self.compaction_threshold,
+            summarizer=self._summarize,
+            large_output_tokens=self.large_output_tokens,
+            keep_recent=self.keep_recent,
+        )
+
+    def _summarize(self, old: list[dict]) -> "str | None":
+        bounded = prune(old, self.max_context_tokens)
+        try:
+            with Spinner():
+                resp = self.client.messages(
+                    system=COMPACTION_SYSTEM_PROMPT,
+                    messages=bounded + [{"role": "user", "content": COMPACTION_INSTRUCTION}],
+                    tools=[],
+                    max_tokens=self.max_response_tokens,
+                    model=self.model,
+                )
+        except (AvaError, ContextOverflow, TokenExpired):
+            return None
+        text = "".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
+        return text or None
+
     def _serialize_response_content(self, content: list) -> list[dict]:
         return [block_to_dict(b) for b in content]
 
     def run_turn(self, user_text: str, renderer: Renderer) -> None:
         self.messages.append({"role": "user", "content": user_text})
-        self.messages = prune(self.messages, max_tokens=self.max_context_tokens)
         recent_signatures: list[str] = []
 
         for _ in range(self.max_iterations):
+            self.messages = self._fit()
             try:
                 try:
                     with Spinner():
