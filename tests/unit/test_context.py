@@ -356,3 +356,75 @@ def test_fit_context_prune_backstop_when_still_over():
                       large_output_tokens=500, keep_recent=2)
     total = sum(estimate_tokens(m) for m in out)
     assert total <= 2000 or len(out) == 1
+
+
+def test_fit_context_full_cascade_preserves_tool_pairing():
+    from avadex.context import fit_context
+
+    def _tool_use_ids_present(messages):
+        ids = set()
+        for m in messages:
+            c = m.get("content")
+            if isinstance(c, list):
+                for b in c:
+                    if b.get("type") == "tool_use" and b.get("id"):
+                        ids.add(b["id"])
+        return ids
+
+    def _tool_result_ids_present(messages):
+        ids = set()
+        for m in messages:
+            c = m.get("content")
+            if isinstance(c, list):
+                for b in c:
+                    if b.get("type") == "tool_result" and b.get("tool_use_id"):
+                        ids.add(b["tool_use_id"])
+        return ids
+
+    big = "x" * 8000
+    # A realistic long history exercising all three passes:
+    #  - a superseded read_file pair (r1 then r2 of same path)
+    #  - a denied tool call pair (d1)
+    #  - a large non-error output (t1)
+    #  - several plain turns to push well over budget
+    #  - a recent tool_use/result pair that must stay paired
+    messages = [
+        {"role": "user", "content": "the original goal " + "g" * 2000},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r1", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r1", "content": big, "is_error": False}]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "d1", "name": "bash", "input": {"cmd": "rm"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "d1", "content": "denied by user", "is_error": True}]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t1", "name": "grep_files", "input": {}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": big, "is_error": False}]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r2", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r2", "content": "NEW CONTENT", "is_error": False}]},
+        {"role": "user", "content": "x" * 4000},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "k1", "name": "bash", "input": {}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "k1", "content": "recent ok", "is_error": False}]},
+    ]
+    original = [dict(m) for m in messages]
+
+    out = fit_context(messages, max_tokens=1500, threshold=0.8,
+                      summarizer=lambda old: "SUMMARY OF EARLIER WORK",
+                      large_output_tokens=500, keep_recent=3)
+
+    # 1. No tool_result is orphaned: every result's id must have a matching tool_use present.
+    result_ids = _tool_result_ids_present(out)
+    use_ids = _tool_use_ids_present(out)
+    assert result_ids <= use_ids, f"orphaned tool_result ids: {result_ids - use_ids}"
+
+    # 2. The caller's list was not mutated (dedup deep-copies).
+    assert messages == original
+
+    # 3. The pipeline actually reduced size (it was well over budget).
+    assert sum(estimate_tokens(m) for m in out) < sum(estimate_tokens(m) for m in original)
