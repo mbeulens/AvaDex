@@ -179,3 +179,16 @@ def test_stub_large_outputs_leaves_small_outputs():
     ]
     out = _stub_large_outputs(messages, large_output_tokens=1000, keep_recent=0)
     assert out[0]["content"][0]["content"] == "tiny"
+
+
+def test_stub_large_outputs_respects_recent_window():
+    from avadex.context import _stub_large_outputs
+    big = "x" * 8000
+    messages = [
+        {"role": "assistant", "content": "older"},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": big, "is_error": False}]},
+    ]
+    # keep_recent=2 protects both messages → the large output is left untouched.
+    out = _stub_large_outputs(messages, large_output_tokens=1000, keep_recent=2)
+    assert out[1]["content"][0]["content"] == big

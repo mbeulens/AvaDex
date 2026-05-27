@@ -108,8 +108,10 @@ def _stub_large_outputs(messages: list[dict], large_output_tokens: int,
             if b.get("type") != "tool_result" or b.get("is_error"):
                 continue
             content = b.get("content")
-            if isinstance(content, str) and estimate_tokens(content) > large_output_tokens:
-                approx = estimate_tokens(content)
+            if not isinstance(content, str):
+                continue
+            approx = estimate_tokens(content)
+            if approx > large_output_tokens:
                 b["content"] = f"[output truncated to save context: ~{approx} tokens]"
     return messages
 
