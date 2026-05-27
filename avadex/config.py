@@ -34,6 +34,9 @@ class Config:
     max_context_tokens: int = 16000   # how much conversation/history to send (client-side prune)
     max_response_tokens: int = 4096   # max tokens the model may generate per turn
     max_iterations: int = 50          # max tool-use round-trips per user turn
+    context_compaction_threshold: float = 0.8  # high-water fraction that engages dedup+compaction
+    context_large_output_tokens: int = 1000    # tool results bigger than this get stubbed by dedup
+    context_keep_recent: int = 6               # messages kept verbatim (protected from dedup/compaction)
     system_prompt_path: str = ""
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
 
@@ -52,6 +55,9 @@ def load_config(path: Path) -> Config:
             max_context_tokens=data.get("max_context_tokens", 16000),
             max_response_tokens=data.get("max_response_tokens", 4096),
             max_iterations=data.get("max_iterations", 50),
+            context_compaction_threshold=data.get("context_compaction_threshold", 0.8),
+            context_large_output_tokens=data.get("context_large_output_tokens", 1000),
+            context_keep_recent=data.get("context_keep_recent", 6),
             system_prompt_path=data.get("system_prompt_path", ""),
             mcp_servers=_parse_mcp_servers(data.get("mcp_servers", [])),
         )

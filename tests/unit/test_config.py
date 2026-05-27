@@ -208,3 +208,29 @@ def test_parse_mcp_servers_env_defaults_to_os_environ(monkeypatch):
     }]
     servers = _parse_mcp_servers(raw)  # no env -> falls back to os.environ
     assert servers[0].headers["Authorization"] == "Bearer fromenv"
+
+
+def test_config_context_management_defaults(tmp_path):
+    from avadex.config import load_config
+    p = tmp_path / "config.toml"
+    p.write_text('ava_url = "http://x"\nava_token = "t"\n')
+    cfg = load_config(p)
+    assert cfg.context_compaction_threshold == 0.8
+    assert cfg.context_large_output_tokens == 1000
+    assert cfg.context_keep_recent == 6
+
+
+def test_config_context_management_overrides(tmp_path):
+    from avadex.config import load_config
+    p = tmp_path / "config.toml"
+    p.write_text(
+        'ava_url = "http://x"\n'
+        'ava_token = "t"\n'
+        'context_compaction_threshold = 0.5\n'
+        'context_large_output_tokens = 200\n'
+        'context_keep_recent = 3\n'
+    )
+    cfg = load_config(p)
+    assert cfg.context_compaction_threshold == 0.5
+    assert cfg.context_large_output_tokens == 200
+    assert cfg.context_keep_recent == 3
