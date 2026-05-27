@@ -3,6 +3,20 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-05-27
+
+### Added
+- Hybrid context management so sessions run far longer before losing context.
+  When usage crosses a configurable high-water mark, AvaDex first runs a
+  deterministic **dedup** pass — stubbing superseded `read_file` results,
+  removing denied tool calls, and truncating large tool outputs (errors are
+  kept) — then, if still over budget, **compacts** older turns into a single
+  summary via the session model, preserving goals, key facts/data, decisions,
+  and pending next steps. The existing FIFO prune remains as a final backstop.
+  Context is now refit at the top of every agent iteration, so compaction can
+  fire mid-task. New `config.toml` keys: `context_compaction_threshold` (0.8),
+  `context_large_output_tokens` (1000), `context_keep_recent` (6).
+
 ## [0.2.12] — 2026-05-27
 
 ### Changed
