@@ -225,3 +225,51 @@ def test_dedup_does_not_mutate_input():
     ]
     dedup(messages, large_output_tokens=1000, keep_recent=0)
     assert messages[0]["content"][0]["content"] == big  # original untouched
+
+
+def test_compact_replaces_old_with_summary():
+    from avadex.context import compact
+    messages = [
+        {"role": "user", "content": "goal"},
+        {"role": "assistant", "content": "work1"},
+        {"role": "user", "content": "more"},
+        {"role": "assistant", "content": "work2"},
+        {"role": "user", "content": "recent1"},
+        {"role": "assistant", "content": "recent2"},
+    ]
+    out = compact(messages, lambda old: "SUMMARY", keep_recent=2)
+    assert out[0] == {"role": "user", "content": "[Earlier conversation summary]\nSUMMARY"}
+    assert out[1:] == messages[-2:]
+
+
+def test_compact_none_summary_is_noop():
+    from avadex.context import compact
+    messages = [{"role": "user", "content": f"m{i}"} for i in range(6)]
+    out = compact(messages, lambda old: None, keep_recent=2)
+    assert out == messages
+
+
+def test_compact_small_history_is_noop():
+    from avadex.context import compact
+    messages = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]
+    out = compact(messages, lambda old: "S", keep_recent=6)
+    assert out == messages
+
+
+def test_compact_boundary_avoids_orphan_tool_result():
+    from avadex.context import compact
+    messages = [
+        {"role": "user", "content": "goal"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "x1", "name": "bash", "input": {}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "x1", "content": "ok", "is_error": False}]},
+        {"role": "assistant", "content": "done"},
+    ]
+    out = compact(messages, lambda old: "S", keep_recent=2)
+    kept = out[1:]  # out[0] is the summary
+    has_use = any(isinstance(m["content"], list)
+                  and any(b.get("type") == "tool_use" for b in m["content"]) for m in kept)
+    has_result = any(isinstance(m["content"], list)
+                     and any(b.get("type") == "tool_result" for b in m["content"]) for m in kept)
+    assert has_use and has_result
