@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from typing import Callable
 
 SAFETY_FACTOR = 1.2
 
@@ -133,7 +134,8 @@ def _starts_with_tool_result(message: dict) -> bool:
     return isinstance(c, list) and any(b.get("type") == "tool_result" for b in c)
 
 
-def compact(messages: list[dict], summarizer, *, keep_recent: int) -> list[dict]:
+def compact(messages: list[dict], summarizer: "Callable[[list[dict]], str | None]",
+            *, keep_recent: int) -> list[dict]:
     """Replace old turns with a single summary message produced by `summarizer`.
 
     `summarizer(old_messages) -> str | None`. Returning None leaves messages
@@ -145,7 +147,7 @@ def compact(messages: list[dict], summarizer, *, keep_recent: int) -> list[dict]
     cut = n - keep_recent
     # Move the cut earlier so the kept segment never begins with an orphaned
     # tool_result (whose tool_use would be stranded in the old segment).
-    while cut > 0 and _starts_with_tool_result(messages[cut]):
+    while 0 < cut < n and _starts_with_tool_result(messages[cut]):
         cut -= 1
     if cut <= 0:
         return messages

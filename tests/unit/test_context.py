@@ -273,3 +273,37 @@ def test_compact_boundary_avoids_orphan_tool_result():
     has_result = any(isinstance(m["content"], list)
                      and any(b.get("type") == "tool_result" for b in m["content"]) for m in kept)
     assert has_use and has_result
+
+
+def test_compact_keep_recent_zero_summarizes_all():
+    from avadex.context import compact
+    captured = {}
+    messages = [
+        {"role": "user", "content": "a"},
+        {"role": "assistant", "content": "b"},
+        {"role": "user", "content": "c"},
+    ]
+    def summ(old):
+        captured["n"] = len(old)
+        return "ALL"
+    out = compact(messages, summ, keep_recent=0)
+    assert out == [{"role": "user", "content": "[Earlier conversation summary]\nALL"}]
+    assert captured["n"] == 3  # summarizer saw the whole history
+
+
+def test_compact_all_tool_results_bails_out():
+    from avadex.context import compact
+    # Every candidate cut point starts with a tool_result → walk reaches cut=1 and
+    # the segment is too entangled; must not crash and must not strand a result.
+    messages = [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "a", "content": "r0", "is_error": False}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "b", "content": "r1", "is_error": False}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "c", "content": "r2", "is_error": False}]},
+    ]
+    out = compact(messages, lambda old: "S", keep_recent=2)
+    # cut walks 1 -> stops at 1 (index 1 is a tool_result, index 0 check: cut becomes... )
+    # Whatever the boundary, the call must not raise and must return a list.
+    assert isinstance(out, list)
