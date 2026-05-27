@@ -101,3 +101,32 @@ def test_stub_superseded_reads_respects_recent_window():
     # keep_recent=4 protects everything → no stubbing
     out = _stub_superseded_reads(messages, keep_recent=4)
     assert out[1]["content"][0]["content"] == "OLD CONTENT"
+
+
+def test_drop_denied_calls_removes_pair_and_empty_message():
+    from avadex.context import _drop_denied_calls
+    messages = [
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "d1", "name": "bash", "input": {"cmd": "rm -rf /"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "d1", "content": "denied by user", "is_error": True}]},
+        {"role": "assistant", "content": "ok, moving on"},
+    ]
+    out = _drop_denied_calls(messages, keep_recent=0)
+    assert len(out) == 1
+    assert out[0]["content"] == "ok, moving on"
+
+
+def test_drop_denied_calls_keeps_mixed_blocks():
+    from avadex.context import _drop_denied_calls
+    messages = [
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "let me try two things"},
+            {"type": "tool_use", "id": "d1", "name": "bash", "input": {}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "d1", "content": "denied by user", "is_error": True}]},
+    ]
+    out = _drop_denied_calls(messages, keep_recent=0)
+    # The assistant message keeps its text block; the tool_use and its result are gone.
+    assert out[0]["content"] == [{"type": "text", "text": "let me try two things"}]
+    assert len(out) == 1

@@ -59,6 +59,41 @@ def _stub_superseded_reads(messages: list[dict], keep_recent: int) -> list[dict]
     return messages
 
 
+def _drop_denied_calls(messages: list[dict], keep_recent: int) -> list[dict]:
+    """Remove tool_use blocks and their 'denied by user' results as pairs."""
+    protected = _protected_start(len(messages), keep_recent)
+    denied_ids: set[str] = set()
+    for i, m in enumerate(messages):
+        if i >= protected:
+            continue
+        c = m.get("content")
+        if isinstance(c, list):
+            for b in c:
+                if (b.get("type") == "tool_result"
+                        and b.get("is_error")
+                        and b.get("content") == "denied by user"
+                        and b.get("tool_use_id")):
+                    denied_ids.add(b["tool_use_id"])
+    if not denied_ids:
+        return messages
+    out: list[dict] = []
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, list):
+            new_blocks = [
+                b for b in c
+                if not (
+                    (b.get("type") == "tool_use" and b.get("id") in denied_ids)
+                    or (b.get("type") == "tool_result" and b.get("tool_use_id") in denied_ids)
+                )
+            ]
+            if not new_blocks:
+                continue  # drop a message that became empty
+            m = {**m, "content": new_blocks}
+        out.append(m)
+    return out
+
+
 def _tool_use_ids(message: dict) -> set[str]:
     c = message.get("content", "")
     if not isinstance(c, list):
