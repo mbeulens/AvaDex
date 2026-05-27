@@ -192,3 +192,36 @@ def test_stub_large_outputs_respects_recent_window():
     # keep_recent=2 protects both messages → the large output is left untouched.
     out = _stub_large_outputs(messages, large_output_tokens=1000, keep_recent=2)
     assert out[1]["content"][0]["content"] == big
+
+
+def test_dedup_applies_all_passes():
+    from avadex.context import dedup
+    big = "x" * 8000
+    messages = [
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r1", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r1", "content": big, "is_error": False}]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r2", "name": "read_file", "input": {"path": "/a.py"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r2", "content": "NEW", "is_error": False}]},
+        {"role": "user", "content": "recent"},
+        {"role": "user", "content": "recent2"},
+    ]
+    out = dedup(messages, large_output_tokens=1000, keep_recent=2)
+    # r1 is a superseded read AND large → its body must be stubbed
+    assert out[1]["content"][0]["content"].startswith("[superseded by a later read")
+
+
+def test_dedup_does_not_mutate_input():
+    from avadex.context import dedup
+    big = "x" * 8000
+    messages = [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": big, "is_error": False}]},
+        {"role": "assistant", "content": "a"},
+        {"role": "assistant", "content": "b"},
+    ]
+    dedup(messages, large_output_tokens=1000, keep_recent=0)
+    assert messages[0]["content"][0]["content"] == big  # original untouched

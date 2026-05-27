@@ -116,6 +116,18 @@ def _stub_large_outputs(messages: list[dict], large_output_tokens: int,
     return messages
 
 
+def dedup(messages: list[dict], *, large_output_tokens: int, keep_recent: int) -> list[dict]:
+    """Reclaim context space from redundant content without an LLM call.
+
+    Operates on a deep copy so the caller's messages are never mutated.
+    """
+    msgs = copy.deepcopy(messages)
+    msgs = _stub_superseded_reads(msgs, keep_recent)
+    msgs = _drop_denied_calls(msgs, keep_recent)
+    msgs = _stub_large_outputs(msgs, large_output_tokens, keep_recent)
+    return msgs
+
+
 def _tool_use_ids(message: dict) -> set[str]:
     c = message.get("content", "")
     if not isinstance(c, list):
