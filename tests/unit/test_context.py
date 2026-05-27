@@ -130,3 +130,17 @@ def test_drop_denied_calls_keeps_mixed_blocks():
     # The assistant message keeps its text block; the tool_use and its result are gone.
     assert out[0]["content"] == [{"type": "text", "text": "let me try two things"}]
     assert len(out) == 1
+
+
+def test_drop_denied_calls_respects_recent_window():
+    from avadex.context import _drop_denied_calls
+    messages = [
+        {"role": "assistant", "content": "earlier"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "d1", "name": "bash", "input": {}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "d1", "content": "denied by user", "is_error": True}]},
+    ]
+    # keep_recent=2 protects the last two messages (the denied pair) → preserved untouched.
+    out = _drop_denied_calls(messages, keep_recent=2)
+    assert out == messages
