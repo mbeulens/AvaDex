@@ -159,6 +159,25 @@ def compact(messages: list[dict], summarizer: "Callable[[list[dict]], str | None
     return [summary_msg] + recent
 
 
+def fit_context(messages: list[dict], *, max_tokens: int, threshold: float,
+                summarizer, large_output_tokens: int, keep_recent: int) -> list[dict]:
+    """Make `messages` fit the budget: dedup, then proactive compaction, then FIFO.
+
+    - threshold: high-water fraction of max_tokens that engages management.
+    - summarizer: Callable[[list[dict]], str | None] | None used by compaction.
+    """
+    high_water = threshold * max_tokens
+    if sum(estimate_tokens(m) for m in messages) <= high_water:
+        return messages
+    messages = dedup(messages, large_output_tokens=large_output_tokens,
+                     keep_recent=keep_recent)
+    if sum(estimate_tokens(m) for m in messages) > high_water and summarizer is not None:
+        messages = compact(messages, summarizer, keep_recent=keep_recent)
+    if sum(estimate_tokens(m) for m in messages) > max_tokens:
+        messages = prune(messages, max_tokens)
+    return messages
+
+
 def _tool_use_ids(message: dict) -> set[str]:
     c = message.get("content", "")
     if not isinstance(c, list):

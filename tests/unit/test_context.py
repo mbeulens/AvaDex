@@ -307,3 +307,52 @@ def test_compact_all_tool_results_bails_out():
     # cut walks 1 -> stops at 1 (index 1 is a tool_result, index 0 check: cut becomes... )
     # Whatever the boundary, the call must not raise and must return a list.
     assert isinstance(out, list)
+
+
+def test_fit_context_under_threshold_is_noop():
+    from avadex.context import fit_context
+    called = []
+    messages = [{"role": "user", "content": "hi"}]
+    out = fit_context(messages, max_tokens=1000, threshold=0.8,
+                      summarizer=lambda old: called.append(1) or "S",
+                      large_output_tokens=1000, keep_recent=6)
+    assert out == messages
+    assert called == []  # summarizer never called
+
+
+def test_fit_context_dedup_alone_avoids_summary():
+    from avadex.context import fit_context
+    called = []
+    big = "x" * 8000  # ~2400 tokens, will be stubbed by dedup
+    messages = [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": big, "is_error": False}]},
+        {"role": "user", "content": "small recent"},
+        {"role": "user", "content": "small recent 2"},
+    ]
+    out = fit_context(messages, max_tokens=1000, threshold=0.8,
+                      summarizer=lambda old: called.append(1) or "S",
+                      large_output_tokens=500, keep_recent=2)
+    assert called == []  # dedup brought it under threshold; no LLM call
+
+
+def test_fit_context_summarizes_when_dedup_insufficient():
+    from avadex.context import fit_context
+    called = []
+    messages = [{"role": "user", "content": "x" * 4000} for _ in range(6)]  # ~1200 tok each
+    out = fit_context(messages, max_tokens=3000, threshold=0.8,
+                      summarizer=lambda old: called.append(len(old)) or "S",
+                      large_output_tokens=500, keep_recent=2)
+    assert called  # summarizer invoked
+    assert out[0]["content"] == "[Earlier conversation summary]\nS"
+
+
+def test_fit_context_prune_backstop_when_still_over():
+    from avadex.context import fit_context
+    # Summarizer returns None → compaction no-ops → prune must trim to ceiling.
+    messages = [{"role": "user", "content": "x" * 4000} for _ in range(6)]
+    out = fit_context(messages, max_tokens=2000, threshold=0.8,
+                      summarizer=lambda old: None,
+                      large_output_tokens=500, keep_recent=2)
+    total = sum(estimate_tokens(m) for m in out)
+    assert total <= 2000 or len(out) == 1
