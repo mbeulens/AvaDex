@@ -179,6 +179,9 @@ def run_repl(
         model=initial_model,
         prompt_user=build_terminal_prompter(),
         max_iterations=cfg.max_iterations,
+        compaction_threshold=cfg.context_compaction_threshold,
+        large_output_tokens=cfg.context_large_output_tokens,
+        keep_recent=cfg.context_keep_recent,
     )
     # Expose registry + permissions on agent for /tools and /allow slash commands
     agent.registry = registry
