@@ -94,6 +94,26 @@ def _drop_denied_calls(messages: list[dict], keep_recent: int) -> list[dict]:
     return out
 
 
+def _stub_large_outputs(messages: list[dict], large_output_tokens: int,
+                        keep_recent: int) -> list[dict]:
+    """Stub the body of large, non-error tool_results older than the recent window."""
+    protected = _protected_start(len(messages), keep_recent)
+    for i, m in enumerate(messages):
+        if i >= protected:
+            continue
+        c = m.get("content")
+        if not isinstance(c, list):
+            continue
+        for b in c:
+            if b.get("type") != "tool_result" or b.get("is_error"):
+                continue
+            content = b.get("content")
+            if isinstance(content, str) and estimate_tokens(content) > large_output_tokens:
+                approx = estimate_tokens(content)
+                b["content"] = f"[output truncated to save context: ~{approx} tokens]"
+    return messages
+
+
 def _tool_use_ids(message: dict) -> set[str]:
     c = message.get("content", "")
     if not isinstance(c, list):

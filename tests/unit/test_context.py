@@ -144,3 +144,38 @@ def test_drop_denied_calls_respects_recent_window():
     # keep_recent=2 protects the last two messages (the denied pair) → preserved untouched.
     out = _drop_denied_calls(messages, keep_recent=2)
     assert out == messages
+
+
+def test_stub_large_outputs_truncates_big_non_error():
+    from avadex.context import _stub_large_outputs
+    big = "x" * 8000  # ~2400 token estimate
+    messages = [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": big, "is_error": False}]},
+        {"role": "assistant", "content": "next"},
+    ]
+    out = _stub_large_outputs(messages, large_output_tokens=1000, keep_recent=0)
+    assert out[0]["content"][0]["content"].startswith("[output truncated to save context:")
+
+
+def test_stub_large_outputs_preserves_errors():
+    from avadex.context import _stub_large_outputs
+    big_err = "e" * 8000
+    messages = [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": big_err, "is_error": True}]},
+        {"role": "assistant", "content": "next"},
+    ]
+    out = _stub_large_outputs(messages, large_output_tokens=1000, keep_recent=0)
+    assert out[0]["content"][0]["content"] == big_err
+
+
+def test_stub_large_outputs_leaves_small_outputs():
+    from avadex.context import _stub_large_outputs
+    messages = [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "tiny", "is_error": False}]},
+        {"role": "assistant", "content": "next"},
+    ]
+    out = _stub_large_outputs(messages, large_output_tokens=1000, keep_recent=0)
+    assert out[0]["content"][0]["content"] == "tiny"
