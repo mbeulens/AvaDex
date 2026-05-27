@@ -3,6 +3,16 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-05-27
+
+### Changed
+- System prompt now steers the agent to answer domain/company questions
+  (e.g. "what do you know about Syntec X") from the knowledge Ava injects into
+  context (the `## Relevant knowledge from Ava` block) instead of grepping the
+  local working directory with file tools. Previously the agent treated such
+  questions as local file searches, grepped the (unrelated) project folder,
+  and missed the knowledge base entirely.
+
 ## [0.3.0] — 2026-05-27
 
 ### Added

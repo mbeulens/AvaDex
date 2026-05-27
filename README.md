@@ -192,9 +192,13 @@ each `[y/n/a]` prompt before pressing `y`.
 
 - Ava's `/api/v1/messages` is non-streaming — each turn shows a "..."
   spinner until the response arrives.
-- Hard 4096-token context window on Ava's side; AvaDex prunes aggressively.
-- No web search / RAG tools yet — Ava doesn't expose standalone endpoints.
-  (Auto-RAG fires server-side on every request anyway.)
+- Ava's agent API runs at a 32768-token context (`num_ctx`); AvaDex manages
+  long sessions with hybrid context management (dedup + proactive compaction,
+  see CHANGELOG 0.3.0).
+- No standalone web-search / RAG *tools* — Ava doesn't expose those endpoints.
+  Auto-RAG fires server-side on every request (at web-chat parity), and the
+  system prompt steers the agent to answer domain questions from that injected
+  knowledge rather than searching local files.
 - Linux only.
 
 ## Develop
