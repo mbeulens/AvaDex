@@ -3,6 +3,17 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-05-28
+
+### Added
+- Headless agent mode: `avadex --prompt "TEXT" [--model NAME]` runs one agent
+  turn and exits, with only the final assistant answer written to stdout
+  (errors to stderr, exit 0 on `end_turn` otherwise non-zero). The agent's
+  internal tool-use loop still iterates as normal — MCP servers and built-in
+  tools are all in play — and tool prompts auto-approve since there's no
+  human to ask. `--model` overrides the model in both headless and REPL
+  mode. Adds `HeadlessRenderer` to `avadex.renderer`.
+
 ## [0.4.0] — 2026-05-27
 
 ### Changed
