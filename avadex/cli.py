@@ -26,6 +26,24 @@ def _auto_approve_prompter(tool, args):
     """
     return ("yes", None)
 
+
+def _skills_message(skills: dict) -> str | None:
+    """Format the startup line for loaded skills, mirroring the MCP line.
+
+    Returns None when no skills are loaded (mirrors how the MCP line is only
+    printed when `.mcp.json` exists). Splits the count by source when both
+    global and workdir skills are present.
+    """
+    if not skills:
+        return None
+    workdir_n = sum(1 for s in skills.values() if s.source == "workdir")
+    global_n = len(skills) - workdir_n
+    if workdir_n and global_n:
+        return f"Loaded {len(skills)} skill(s) ({global_n} global, {workdir_n} workdir)"
+    if workdir_n:
+        return f"Loaded {workdir_n} skill(s) from workdir"
+    return f"Loaded {global_n} skill(s) from global"
+
 log = get_logger("cli")
 
 DEFAULT_CONFIG = Path.home() / ".config" / "avadex" / "config.toml"
@@ -170,6 +188,9 @@ def run_repl(
     cwd = Path.cwd()
     skills = discover_skills(cwd)
     registry.register(make_load_skill_tool(skills))
+    _skills_msg = _skills_message(skills)
+    if _skills_msg is not None:
+        print(_skills_msg, file=sys.stderr)
     try:
         mcp_specs = resolve_mcp_servers(cfg, cwd)
     except ConfigMissing as exc:

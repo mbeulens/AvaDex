@@ -3,6 +3,15 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-05-29
+
+### Added
+- Startup now logs the number of skills loaded, matching the existing
+  `Loaded N MCP server(s) from ./.mcp.json` line. Format:
+  `Loaded N skill(s) from global` / `from workdir` /
+  `(N global, N workdir)` when both sources are present. Goes to stderr.
+  Suppressed when no skills are found.
+
 ## [0.5.0] — 2026-05-29
 
 ### Added
