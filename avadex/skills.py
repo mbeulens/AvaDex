@@ -71,9 +71,18 @@ def render_skill_index(skills: dict[str, Skill]) -> str:
     """One-line-per-skill index for the system prompt. Empty string if none."""
     if not skills:
         return ""
-    lines = ["You have these SKILLS — focused playbooks for specific tasks. "
-             "When the user's request matches one, call the `load_skill` tool "
-             "with its name to read the full instructions BEFORE acting:"]
+    lines = [
+        "You have these SKILLS — focused playbooks for specific tasks. "
+        "**When the user's request matches a skill below, you MUST call "
+        "`load_skill` FIRST, before any other tool — including MCP tools "
+        "that look like a direct shortcut.** The skill body holds rules "
+        "the raw tool schemas do NOT enforce (correct argument shapes, "
+        "valid keys, anti-patterns); skipping load_skill is how you "
+        "produce malformed tool calls. After load_skill returns, follow "
+        "its body exactly.",
+        "",
+        "Skills:",
+    ]
     for s in sorted(skills.values(), key=lambda s: s.name):
         lines.append(f"- {s.name}: {s.description}")
     return "\n".join(lines)

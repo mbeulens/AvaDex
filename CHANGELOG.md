@@ -3,6 +3,19 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] — 2026-05-29
+
+### Changed
+- Skill-index preamble in the system prompt is now an unambiguous mandate:
+  *"When the user's request matches a skill below, you MUST call `load_skill`
+  FIRST, before any other tool — including MCP tools that look like a direct
+  shortcut."* Plus a short rationale about raw tool schemas not enforcing the
+  rules the skill body holds. The old preamble (*"…BEFORE acting"*) was
+  routinely outweighed by the model's bias toward direct tool use when an MCP
+  tool matched the task; the strengthened phrasing eliminates the worst-shape
+  filter calls (operator-wrapper / dotted-key hallucinations) even on runs
+  where the model still skips the explicit `load_skill` call.
+
 ## [0.5.1] — 2026-05-29
 
 ### Added
