@@ -27,6 +27,18 @@ def _auto_approve_prompter(tool, args):
     return ("yes", None)
 
 
+def _select_prompter(prompt, auto_approve):
+    """Choose the tool-approval prompter.
+
+    Headless (`--prompt`) and autonomous (`--yes`) modes both auto-approve every
+    tool call for this invocation only (no allowlist mutation). An interactive
+    REPL without `--yes` asks the human per non-read tool.
+    """
+    if prompt is not None or auto_approve:
+        return _auto_approve_prompter
+    return build_terminal_prompter()
+
+
 def _skills_message(skills: dict) -> str | None:
     """Format the startup line for loaded skills, mirroring the MCP line.
 
@@ -158,6 +170,7 @@ def run_repl(
     input_fn=None,
     prompt: str | None = None,
     model: str | None = None,
+    auto_approve: bool = False,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -219,7 +232,7 @@ def run_repl(
         max_context_tokens=cfg.max_context_tokens,
         max_response_tokens=cfg.max_response_tokens,
         model=model or initial_model,
-        prompt_user=_auto_approve_prompter if prompt is not None else build_terminal_prompter(),
+        prompt_user=_select_prompter(prompt, auto_approve),
         max_iterations=cfg.max_iterations,
         compaction_threshold=cfg.context_compaction_threshold,
         large_output_tokens=cfg.context_large_output_tokens,
@@ -297,6 +310,13 @@ def main(argv: list[str] | None = None) -> int:
         metavar="NAME",
         help="Override the model (works in both headless and REPL mode).",
     )
+    parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Autonomous: auto-approve every tool call, including writes, in "
+             "the REPL (no per-action confirmation). Headless --prompt already "
+             "auto-approves regardless of this flag.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -309,7 +329,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "login":
         return login_redirect_command()
     # Default: REPL (or headless agent if --prompt is given).
-    return run_repl(config_path=args.config, prompt=args.prompt, model=args.model)
+    return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
+                    auto_approve=args.yes)
 
 
 if __name__ == "__main__":

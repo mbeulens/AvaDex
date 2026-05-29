@@ -3,6 +3,18 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-05-29
+
+### Added
+- `--yes` / `-y` flag for autonomous REPL sessions: auto-approves every tool
+  call — writes included — with no per-action confirmation prompt. Mirrors the
+  auto-approval that headless `--prompt` already applies, so the same agent can
+  run unattended interactively. Prompter selection is now centralized in
+  `_select_prompter(prompt, auto_approve)`: auto-approve when either `--prompt`
+  or `--yes` is set, otherwise the interactive terminal prompter.
+  **Note:** `--yes` removes the human checkpoint before destructive/write tools
+  (`s_prt_create`, `bash`, `write_file`, …); use it deliberately.
+
 ## [0.5.2] — 2026-05-29
 
 ### Changed

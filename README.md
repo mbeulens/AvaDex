@@ -41,6 +41,14 @@ AvaDex will call tools (file reads, edits, shell) and prompt before any
 write or shell command unless the action matches your allowlist
 (`~/.config/avadex/allowlist.toml`).
 
+Pass **`--yes`** (or `-y`) to run the REPL autonomously: every tool call —
+writes and shell included — is auto-approved with no per-action prompt. Use it
+deliberately; it removes the human checkpoint before destructive actions.
+
+```bash
+avadex --yes    # autonomous REPL: no confirmation prompts
+```
+
 ### Headless / scripted use
 
 ```bash
@@ -55,8 +63,9 @@ With `--prompt TEXT`, AvaDex runs a single agent turn (no REPL), writes only
 the final assistant answer to stdout (errors to stderr), and exits. The agent's
 internal tool-use loop iterates as normal — MCP servers, file tools, bash —
 capped by `max_iterations` (default 50, configurable). Tool prompts
-**auto-approve** in headless mode since there's no human to ask. `--model NAME`
-overrides the model in both headless and REPL mode.
+**auto-approve** in headless mode since there's no human to ask (the same
+auto-approval `--yes` enables for the REPL). `--model NAME` overrides the model
+in both headless and REPL mode.
 
 ## Tools
 
