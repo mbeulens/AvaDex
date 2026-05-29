@@ -14,7 +14,17 @@ from avadex.tools.builtin import ALL_BUILTINS
 from avadex.tools.mcp import MCPClient, register_mcp_tools
 from avadex.agent_loop import AgentLoop
 from avadex.repl import Repl, build_terminal_prompter
+from avadex.renderer import HeadlessRenderer
 from avadex.log import setup as setup_logging, get_logger
+
+
+def _auto_approve_prompter(tool, args):
+    """Headless prompter: every tool call is approved for this invocation only.
+
+    No human is available to answer the normal permission prompt; the pattern
+    is None so nothing is added to the persistent allowlist.
+    """
+    return ("yes", None)
 
 log = get_logger("cli")
 
@@ -128,6 +138,8 @@ def run_repl(
     config_path: Path = DEFAULT_CONFIG,
     allowlist_path: Path = DEFAULT_ALLOWLIST,
     input_fn=None,
+    prompt: str | None = None,
+    model: str | None = None,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -185,8 +197,8 @@ def run_repl(
         system_prompt=_build_system_prompt(cfg, render_skill_index(skills)),
         max_context_tokens=cfg.max_context_tokens,
         max_response_tokens=cfg.max_response_tokens,
-        model=initial_model,
-        prompt_user=build_terminal_prompter(),
+        model=model or initial_model,
+        prompt_user=_auto_approve_prompter if prompt is not None else build_terminal_prompter(),
         max_iterations=cfg.max_iterations,
         compaction_threshold=cfg.context_compaction_threshold,
         large_output_tokens=cfg.context_large_output_tokens,
@@ -195,8 +207,18 @@ def run_repl(
     # Expose registry + permissions on agent for /tools and /allow slash commands
     agent.registry = registry
     agent.permissions = permissions
-    repl = Repl(agent=agent, input_fn=input_fn)
     try:
+        if prompt is not None:
+            # Headless agent: one user turn, clean stdout, exit 0 on end_turn.
+            # The agent's internal tool-use loop still runs as normal (up to
+            # max_iterations) — MCP servers and built-in tools are all in play.
+            renderer = HeadlessRenderer()
+            agent.run_turn(prompt, renderer)
+            sys.stdout.write(renderer.text)
+            if renderer.text and not renderer.text.endswith("\n"):
+                sys.stdout.write("\n")
+            return 1 if renderer.errored else 0
+        repl = Repl(agent=agent, input_fn=input_fn)
         repl.run()
         return 0
     finally:
@@ -239,6 +261,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avadex")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        metavar="TEXT",
+        help="Headless: run one agent turn with this prompt and exit. "
+             "The agent's tool-use loop still iterates as normal (MCP "
+             "servers, file/bash tools); only the final assistant answer "
+             "is written to stdout. Tool prompts auto-approve.",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        metavar="NAME",
+        help="Override the model (works in both headless and REPL mode).",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -250,8 +287,8 @@ def main(argv: list[str] | None = None) -> int:
         return set_key_command(config_path=args.config)
     if args.cmd == "login":
         return login_redirect_command()
-    # Default: REPL
-    return run_repl(config_path=args.config)
+    # Default: REPL (or headless agent if --prompt is given).
+    return run_repl(config_path=args.config, prompt=args.prompt, model=args.model)
 
 
 if __name__ == "__main__":

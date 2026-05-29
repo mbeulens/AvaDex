@@ -41,6 +41,23 @@ AvaDex will call tools (file reads, edits, shell) and prompt before any
 write or shell command unless the action matches your allowlist
 (`~/.config/avadex/allowlist.toml`).
 
+### Headless / scripted use
+
+```bash
+avadex --prompt "Translate 'cage' from English to Dutch"
+# → kooi
+
+avadex --model qwen3.6:27b --prompt "List Syntec partners in Belgium as a table"
+echo $?    # 0 on success, non-zero on error
+```
+
+With `--prompt TEXT`, AvaDex runs a single agent turn (no REPL), writes only
+the final assistant answer to stdout (errors to stderr), and exits. The agent's
+internal tool-use loop iterates as normal — MCP servers, file tools, bash —
+capped by `max_iterations` (default 50, configurable). Tool prompts
+**auto-approve** in headless mode since there's no human to ask. `--model NAME`
+overrides the model in both headless and REPL mode.
+
 ## Tools
 
 Built-in (always available):
