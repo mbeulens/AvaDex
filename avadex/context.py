@@ -5,15 +5,47 @@ import json
 from typing import Callable
 
 SAFETY_FACTOR = 1.2
+# Flat per-image cost. Base64 image payloads are huge (a 1 MB image ~= 1.3M
+# chars) but Ollama sends them out-of-band to the vision model, not as text
+# tokens. Counting the raw base64 would blow the context budget and make the
+# fitter prune away the image. Charge a nominal, fixed cost instead.
+NOMINAL_IMAGE_TOKENS = 1500
+
+
+def _strip_image_payloads(obj):
+    """Return (copy of obj with any base64 image data blanked, image_count).
+    Recurses through dicts/lists; leaves everything else untouched."""
+    if isinstance(obj, dict):
+        if obj.get("type") == "image" and isinstance(obj.get("source"), dict) and obj["source"].get("data"):
+            return {**obj, "source": {**obj["source"], "data": ""}}, 1
+        count = 0
+        new = {}
+        for k, v in obj.items():
+            nv, c = _strip_image_payloads(v)
+            new[k] = nv
+            count += c
+        return new, count
+    if isinstance(obj, list):
+        count = 0
+        new = []
+        for item in obj:
+            ni, c = _strip_image_payloads(item)
+            new.append(ni)
+            count += c
+        return new, count
+    return obj, 0
 
 
 def estimate_tokens(thing: str | dict | list) -> int:
-    """Conservative chars/4 estimator with a 1.2x safety multiplier."""
+    """Conservative chars/4 estimator with a 1.2x safety multiplier.
+
+    Base64 image payloads are counted at a flat NOMINAL_IMAGE_TOKENS each
+    rather than by their (enormous) character length."""
     if isinstance(thing, str):
-        raw = thing
-    else:
-        raw = json.dumps(thing, separators=(",", ":"))
-    return int(len(raw) / 4 * SAFETY_FACTOR)
+        return int(len(thing) / 4 * SAFETY_FACTOR)
+    stripped, n_images = _strip_image_payloads(thing)
+    raw = json.dumps(stripped, separators=(",", ":"))
+    return int(len(raw) / 4 * SAFETY_FACTOR) + n_images * NOMINAL_IMAGE_TOKENS
 
 
 def _protected_start(n: int, keep_recent: int) -> int:

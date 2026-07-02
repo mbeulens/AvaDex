@@ -3,6 +3,23 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-07-02
+
+### Added
+- `attach_image` tool: give the agent a local image (jpg/png/gif/webp/bmp,
+  ≤5 MB) to visually read — gauges, dials, meters, screenshots, text, tables.
+  The model calls it with a path (`~` expanded); the file is base64-encoded
+  into an Anthropic image block and carried to Ava, which routes the request
+  to a vision-capable model. Works the same in the REPL and headless
+  (`--prompt`). Auto-approved (read-only tier). Requires Ava ≥ 0.4.0 and a
+  vision-capable model installed on the Ava server.
+
+### Changed
+- `ToolResult.content` may now be a list of content blocks (not just a string),
+  so tools can return images. The context-window token estimator counts image
+  payloads at a flat nominal cost instead of their raw base64 length, so an
+  attached image no longer blows the context budget and gets pruned away.
+
 ## [0.6.0] — 2026-05-29
 
 ### Added

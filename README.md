@@ -85,6 +85,7 @@ Built-in (always available):
 | `kill_bash`   | Terminate a background job (SIGTERM → SIGKILL after 5s).         |
 | `bash_list`   | List all background jobs.                                        |
 | `web_fetch`   | GET a URL, return body (up to 100 KB, follows redirects).        |
+| `attach_image`| Attach a local image (jpg/png/gif/webp/bmp, ≤5 MB) for a vision model to read. |
 | `todo_write`  | Replace the session todo list (for multi-step planning).         |
 | `todo_read`   | Read the current todo list.                                      |
 

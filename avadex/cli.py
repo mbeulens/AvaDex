@@ -111,6 +111,7 @@ def _default_or_custom_prompt(cfg) -> str:
         "- File operations: read_file, write_file, edit_file, multi_edit, glob, grep_files\n"
         "- Shell: bash (synchronous, default 30s timeout); bash_bg / bash_output / kill_bash / bash_list (background processes)\n"
         "- Web: web_fetch (GET a URL, returns up to 100KB of text)\n"
+        "- Vision: attach_image (attach a local image file — jpg/png/etc — so you can visually read gauges, dials, screenshots, text; use it whenever the user points you at an image path)\n"
         "- Task tracking: todo_write, todo_read (persisted across turns within the session)\n\n"
         "KNOWLEDGE VS. LOCAL FILES. Ava augments your context with curated "
         "company/domain knowledge under a '## Relevant knowledge from Ava' "
