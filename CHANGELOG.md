@@ -3,6 +3,57 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-07-02
+
+### Added
+- `attach_image` tool: give the agent a local image (jpg/png/gif/webp/bmp,
+  ≤5 MB) to visually read — gauges, dials, meters, screenshots, text, tables.
+  The model calls it with a path (`~` expanded); the file is base64-encoded
+  into an Anthropic image block and carried to Ava, which routes the request
+  to a vision-capable model. Works the same in the REPL and headless
+  (`--prompt`). Auto-approved (read-only tier). Requires Ava ≥ 0.4.0 and a
+  vision-capable model installed on the Ava server.
+
+### Changed
+- `ToolResult.content` may now be a list of content blocks (not just a string),
+  so tools can return images. The context-window token estimator counts image
+  payloads at a flat nominal cost instead of their raw base64 length, so an
+  attached image no longer blows the context budget and gets pruned away.
+
+## [0.6.0] — 2026-05-29
+
+### Added
+- `--yes` / `-y` flag for autonomous REPL sessions: auto-approves every tool
+  call — writes included — with no per-action confirmation prompt. Mirrors the
+  auto-approval that headless `--prompt` already applies, so the same agent can
+  run unattended interactively. Prompter selection is now centralized in
+  `_select_prompter(prompt, auto_approve)`: auto-approve when either `--prompt`
+  or `--yes` is set, otherwise the interactive terminal prompter.
+  **Note:** `--yes` removes the human checkpoint before destructive/write tools
+  (`s_prt_create`, `bash`, `write_file`, …); use it deliberately.
+
+## [0.5.2] — 2026-05-29
+
+### Changed
+- Skill-index preamble in the system prompt is now an unambiguous mandate:
+  *"When the user's request matches a skill below, you MUST call `load_skill`
+  FIRST, before any other tool — including MCP tools that look like a direct
+  shortcut."* Plus a short rationale about raw tool schemas not enforcing the
+  rules the skill body holds. The old preamble (*"…BEFORE acting"*) was
+  routinely outweighed by the model's bias toward direct tool use when an MCP
+  tool matched the task; the strengthened phrasing eliminates the worst-shape
+  filter calls (operator-wrapper / dotted-key hallucinations) even on runs
+  where the model still skips the explicit `load_skill` call.
+
+## [0.5.1] — 2026-05-29
+
+### Added
+- Startup now logs the number of skills loaded, matching the existing
+  `Loaded N MCP server(s) from ./.mcp.json` line. Format:
+  `Loaded N skill(s) from global` / `from workdir` /
+  `(N global, N workdir)` when both sources are present. Goes to stderr.
+  Suppressed when no skills are found.
+
 ## [0.5.0] — 2026-05-29
 
 ### Added

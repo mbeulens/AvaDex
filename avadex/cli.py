@@ -26,6 +26,36 @@ def _auto_approve_prompter(tool, args):
     """
     return ("yes", None)
 
+
+def _select_prompter(prompt, auto_approve):
+    """Choose the tool-approval prompter.
+
+    Headless (`--prompt`) and autonomous (`--yes`) modes both auto-approve every
+    tool call for this invocation only (no allowlist mutation). An interactive
+    REPL without `--yes` asks the human per non-read tool.
+    """
+    if prompt is not None or auto_approve:
+        return _auto_approve_prompter
+    return build_terminal_prompter()
+
+
+def _skills_message(skills: dict) -> str | None:
+    """Format the startup line for loaded skills, mirroring the MCP line.
+
+    Returns None when no skills are loaded (mirrors how the MCP line is only
+    printed when `.mcp.json` exists). Splits the count by source when both
+    global and workdir skills are present.
+    """
+    if not skills:
+        return None
+    workdir_n = sum(1 for s in skills.values() if s.source == "workdir")
+    global_n = len(skills) - workdir_n
+    if workdir_n and global_n:
+        return f"Loaded {len(skills)} skill(s) ({global_n} global, {workdir_n} workdir)"
+    if workdir_n:
+        return f"Loaded {workdir_n} skill(s) from workdir"
+    return f"Loaded {global_n} skill(s) from global"
+
 log = get_logger("cli")
 
 DEFAULT_CONFIG = Path.home() / ".config" / "avadex" / "config.toml"
@@ -81,6 +111,7 @@ def _default_or_custom_prompt(cfg) -> str:
         "- File operations: read_file, write_file, edit_file, multi_edit, glob, grep_files\n"
         "- Shell: bash (synchronous, default 30s timeout); bash_bg / bash_output / kill_bash / bash_list (background processes)\n"
         "- Web: web_fetch (GET a URL, returns up to 100KB of text)\n"
+        "- Vision: attach_image (attach a local image file — jpg/png/etc — so you can visually read gauges, dials, screenshots, text; use it whenever the user points you at an image path)\n"
         "- Task tracking: todo_write, todo_read (persisted across turns within the session)\n\n"
         "KNOWLEDGE VS. LOCAL FILES. Ava augments your context with curated "
         "company/domain knowledge under a '## Relevant knowledge from Ava' "
@@ -140,6 +171,7 @@ def run_repl(
     input_fn=None,
     prompt: str | None = None,
     model: str | None = None,
+    auto_approve: bool = False,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -170,6 +202,9 @@ def run_repl(
     cwd = Path.cwd()
     skills = discover_skills(cwd)
     registry.register(make_load_skill_tool(skills))
+    _skills_msg = _skills_message(skills)
+    if _skills_msg is not None:
+        print(_skills_msg, file=sys.stderr)
     try:
         mcp_specs = resolve_mcp_servers(cfg, cwd)
     except ConfigMissing as exc:
@@ -198,7 +233,7 @@ def run_repl(
         max_context_tokens=cfg.max_context_tokens,
         max_response_tokens=cfg.max_response_tokens,
         model=model or initial_model,
-        prompt_user=_auto_approve_prompter if prompt is not None else build_terminal_prompter(),
+        prompt_user=_select_prompter(prompt, auto_approve),
         max_iterations=cfg.max_iterations,
         compaction_threshold=cfg.context_compaction_threshold,
         large_output_tokens=cfg.context_large_output_tokens,
@@ -276,6 +311,13 @@ def main(argv: list[str] | None = None) -> int:
         metavar="NAME",
         help="Override the model (works in both headless and REPL mode).",
     )
+    parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Autonomous: auto-approve every tool call, including writes, in "
+             "the REPL (no per-action confirmation). Headless --prompt already "
+             "auto-approves regardless of this flag.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -288,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "login":
         return login_redirect_command()
     # Default: REPL (or headless agent if --prompt is given).
-    return run_repl(config_path=args.config, prompt=args.prompt, model=args.model)
+    return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
+                    auto_approve=args.yes)
 
 
 if __name__ == "__main__":

@@ -112,6 +112,11 @@ def test_render_skill_index_lists_skills_sorted():
     }
     out = render_skill_index(skills)
     assert "load_skill" in out
+    # Routing must be unambiguous about precedence over other tools,
+    # otherwise the model dives into MCP tools that look like a shortcut
+    # and skips the skill body (real regression seen 2026-05-29).
+    assert "MUST" in out and "FIRST" in out
+    assert "before any other tool" in out
     assert "- alpha: Alpha does stuff." in out
     assert "- beta: Beta does things." in out
     assert out.index("alpha") < out.index("beta")  # sorted by name

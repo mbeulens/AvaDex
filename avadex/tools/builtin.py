@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import base64
 import subprocess
 import glob as _glob
 import re as _re
@@ -40,6 +41,61 @@ READ_FILE = ToolDefinition(
         "required": ["path"],
     },
     handler=read_file_tool,
+)
+
+
+IMAGE_MEDIA_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def attach_image_tool(args: dict) -> ToolResult:
+    """Base64-encode a local image into an Anthropic image block so a vision
+    model can see it. Returns list content: [image_block, text_block]."""
+    path_str = args.get("path", "")
+    if not path_str:
+        return ToolResult(content="missing 'path' argument", is_error=True)
+    p = Path(path_str).expanduser()
+    if not p.exists():
+        return ToolResult(content=f"not found: {p}", is_error=True)
+    if not p.is_file():
+        return ToolResult(content=f"not a file: {p}", is_error=True)
+    media_type = IMAGE_MEDIA_TYPES.get(p.suffix.lower())
+    if media_type is None:
+        supported = ", ".join(sorted(set(IMAGE_MEDIA_TYPES)))
+        return ToolResult(
+            content=f"unsupported image type: {p.suffix or '(no extension)'} (supported: {supported})",
+            is_error=True,
+        )
+    size = p.stat().st_size
+    if size > MAX_IMAGE_BYTES:
+        return ToolResult(
+            content=f"image too large ({size} bytes, max {MAX_IMAGE_BYTES})",
+            is_error=True,
+        )
+    data = base64.b64encode(p.read_bytes()).decode("ascii")
+    return ToolResult(content=[
+        {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}},
+        {"type": "text", "text": f"Attached {p.name} ({size} bytes); it is now visible to you — read it and answer."},
+    ])
+
+
+ATTACH_IMAGE = ToolDefinition(
+    name="attach_image",
+    description=(
+        "Attach a local image file so you can visually inspect it — read gauges, "
+        "dials, meters, screenshots, text, tables, etc. Use this whenever the user "
+        "refers to an image by path. Supported: jpg, jpeg, png, gif, webp, bmp "
+        "(max 5 MB). '~' is expanded."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"path": {"type": "string", "description": "Path to a local image file; '~' is expanded."}},
+        "required": ["path"],
+    },
+    handler=attach_image_tool,
 )
 
 
@@ -341,4 +397,4 @@ MULTI_EDIT = ToolDefinition(
 )
 
 
-ALL_BUILTINS = [READ_FILE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH, MULTI_EDIT, TODO_WRITE, TODO_READ, BASH_BG, BASH_OUTPUT, KILL_BASH, BASH_LIST]
+ALL_BUILTINS = [READ_FILE, ATTACH_IMAGE, WRITE_FILE, EDIT_FILE, BASH, GLOB, GREP_FILES, WEB_FETCH, MULTI_EDIT, TODO_WRITE, TODO_READ, BASH_BG, BASH_OUTPUT, KILL_BASH, BASH_LIST]

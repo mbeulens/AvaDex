@@ -14,7 +14,9 @@ def _brief_args(args: dict) -> str:
 
 @dataclass
 class ToolResult:
-    content: str
+    # Usually a string; attach_image returns a list of Anthropic content blocks
+    # (image + text) that is forwarded verbatim into the tool_result payload.
+    content: str | list
     is_error: bool = False
 
 

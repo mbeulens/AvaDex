@@ -18,7 +18,7 @@ class Decision(Enum):
     AUTO_DENY = "auto_deny"
 
 
-READ_ONLY_TOOLS = {"read_file", "load_skill"}
+READ_ONLY_TOOLS = {"read_file", "load_skill", "attach_image"}
 
 
 @dataclass
@@ -31,7 +31,7 @@ def _tool_argument(tool_name: str, args: dict) -> str:
     """The 'subject' of the tool call that patterns match against."""
     if tool_name == "bash":
         return args.get("command", "")
-    if tool_name in ("read_file", "write_file", "edit_file"):
+    if tool_name in ("read_file", "write_file", "edit_file", "attach_image"):
         return args.get("path", "")
     # MCP tools: stringify args for matching
     return str(args)

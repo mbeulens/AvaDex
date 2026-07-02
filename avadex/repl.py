@@ -55,7 +55,14 @@ class AnsiRenderer:
         if result.is_error:
             print(_c(f"  ✗ {result.content}", "red"))
         else:
-            preview = result.content.splitlines()[0][:80] if result.content else "(empty)"
+            content = result.content
+            if isinstance(content, list):
+                # Block content (e.g. attach_image) — summarize by block type,
+                # never dump the base64 payload.
+                kinds = [b.get("type", "?") if isinstance(b, dict) else "?" for b in content]
+                preview = "[" + ", ".join(kinds) + "]"
+            else:
+                preview = content.splitlines()[0][:80] if content else "(empty)"
             print(f"  {_c('→', 'green')} {preview}")
 
     def info(self, text: str):
