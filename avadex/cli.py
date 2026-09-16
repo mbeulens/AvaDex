@@ -1,11 +1,13 @@
 from __future__ import annotations
 import argparse
+import os
 import sys
 from getpass import getpass
 from pathlib import Path
 
 from avadex.config import save_token, load_config, ConfigMissing
 from avadex.mcp_workdir import resolve_mcp_servers
+from avadex.workdir import resolve_workdir, workdir_allowlist_path, WorkdirError
 from avadex.skills import discover_skills, render_skill_index, make_load_skill_tool
 from avadex.ava_client import AvaClient, AvaError, TokenExpired
 from avadex.permissions import PermissionManager
@@ -172,14 +174,14 @@ def run_repl(
     prompt: str | None = None,
     model: str | None = None,
     auto_approve: bool = False,
+    workdir: Path | None = None,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
     # glob, write_file with a relative path, ...) would surprise-fail.
     # Bail with a clear message instead.
     try:
-        import os as _os
-        _os.getcwd()
+        os.getcwd()
     except (FileNotFoundError, OSError) as exc:
         print(
             f"current working directory is unavailable ({exc}); "
@@ -193,6 +195,18 @@ def run_repl(
     except ConfigMissing as exc:
         print(str(exc), file=sys.stderr)
         return 2
+
+    # Resolve the working directory before chdir'ing, so a relative
+    # --workdir is interpreted against the shell's cwd. Everything downstream
+    # reads Path.cwd(), so skills, .mcp.json/.env, bash and relative file
+    # paths all follow along.
+    try:
+        target = resolve_workdir(flag=workdir, config_value=cfg.workdir)
+    except WorkdirError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    workdir_was_set = bool(workdir or cfg.workdir)
+    os.chdir(target)
 
     client = AvaClient(cfg.ava_url, cfg.ava_token)
     registry = ToolRegistry()
@@ -225,7 +239,13 @@ def run_repl(
             log.warning("MCP server '%s' failed to start: %s", s.name, _describe_exc(exc))
     register_mcp_tools(mcp_clients, registry)
 
-    permissions = PermissionManager(allowlist_path)
+    # A project allowlist is honored when it already exists, or when the user
+    # explicitly chose this workdir (so the first /allow lands in the project).
+    project_allowlist = workdir_allowlist_path(cwd)
+    permissions = PermissionManager(
+        allowlist_path,
+        project_allowlist if (workdir_was_set or project_allowlist.exists()) else None,
+    )
     initial_model = _resolve_initial_model(cfg, client)
     agent = AgentLoop(
         client=client, registry=registry, permissions=permissions,
@@ -318,6 +338,17 @@ def main(argv: list[str] | None = None) -> int:
              "the REPL (no per-action confirmation). Headless --prompt already "
              "auto-approves regardless of this flag.",
     )
+    parser.add_argument(
+        "--workdir",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Directory to work in. AvaDex chdirs here, so skills/, .mcp.json, "
+             ".env, bash and relative file paths all resolve against it, and "
+             "<PATH>/.avadex/allowlist.toml is merged into the allowlist. "
+             "Overrides 'workdir' in config.toml; defaults to the current "
+             "directory.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -331,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         return login_redirect_command()
     # Default: REPL (or headless agent if --prompt is given).
     return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
-                    auto_approve=args.yes)
+                    auto_approve=args.yes, workdir=args.workdir)
 
 
 if __name__ == "__main__":
