@@ -234,3 +234,19 @@ def test_config_context_management_overrides(tmp_path):
     assert cfg.context_compaction_threshold == 0.5
     assert cfg.context_large_output_tokens == 200
     assert cfg.context_keep_recent == 3
+
+
+def test_workdir_defaults_to_empty(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('ava_url = "https://ava.example.com"\nava_token = "abc"\n')
+    assert load_config(p).workdir == ""
+
+
+def test_workdir_is_read_from_config(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text(
+        'ava_url = "https://ava.example.com"\n'
+        'ava_token = "abc"\n'
+        'workdir = "/srv/projects/testsite"\n'
+    )
+    assert load_config(p).workdir == "/srv/projects/testsite"

@@ -38,6 +38,7 @@ class Config:
     context_large_output_tokens: int = 1000    # tool results bigger than this get stubbed by dedup
     context_keep_recent: int = 6               # messages kept verbatim (protected from dedup/compaction)
     system_prompt_path: str = ""
+    workdir: str = ""   # default working directory; overridden by --workdir
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
 
 
@@ -59,6 +60,7 @@ def load_config(path: Path) -> Config:
             context_large_output_tokens=data.get("context_large_output_tokens", 1000),
             context_keep_recent=data.get("context_keep_recent", 6),
             system_prompt_path=data.get("system_prompt_path", ""),
+            workdir=data.get("workdir", ""),
             mcp_servers=_parse_mcp_servers(data.get("mcp_servers", [])),
         )
     except KeyError as exc:
