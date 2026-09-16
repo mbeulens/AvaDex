@@ -2,6 +2,9 @@
 
 Local CLI agent powered by Ana's self-hosted Ava assistant.
 
+Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
+and tool set are settled, and changes to them follow semantic versioning.
+
 ## Install
 
 ```bash
@@ -270,7 +273,7 @@ A project allowlist is read from whatever directory you point AvaDex at, so
 treat a checked-in `.avadex/allowlist.toml` as executable content: read it
 before running AvaDex in a repository you don't control.
 
-## Known limitations (v1)
+## Known limitations
 
 - Ava's `/api/v1/messages` is non-streaming — each turn shows a "..."
   spinner until the response arrives.
