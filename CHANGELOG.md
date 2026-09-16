@@ -3,6 +3,34 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-09-16
+
+### Added
+- `--workdir PATH` flag and a matching `workdir` key in `config.toml`: choose
+  the directory AvaDex works in instead of always using the launch directory.
+  Precedence is flag > config > current directory. `~` is expanded and a
+  relative path resolves against the directory you ran the command from, since
+  resolution happens before the chdir. AvaDex `chdir`s into the workdir at
+  startup, so project `skills/`, `.mcp.json` + `.env`, `bash`, `glob`,
+  `grep_files` and relative file paths all follow it. An unusable workdir
+  exits 2 with a clear message.
+- Project-local allowlist at `<workdir>/.avadex/allowlist.toml`. Its rules are
+  merged with (not substituted for) the global
+  `~/.config/avadex/allowlist.toml`, global first, so a project file can only
+  widen what is permitted. When a workdir is in play, `/allow` appends new
+  rules there instead of the global file, creating it on demand.
+
+### Changed
+- `PermissionManager` takes an optional second allowlist path. The global and
+  workdir rule lists are tracked separately so a save rewrites only its own
+  file — adding a project rule can no longer flatten global rules into it, or
+  the reverse. Single-argument construction is unchanged.
+
+### Fixed
+- Version drift between `pyproject.toml`, `avadex/__init__.py` and the REPL
+  banner is now caught by tests, so a release can't bump one and leave the
+  banner showing the old number.
+
 ## [0.7.0] — 2026-07-02
 
 ### Added
