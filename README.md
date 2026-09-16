@@ -2,6 +2,9 @@
 
 Local CLI agent powered by Ana's self-hosted Ava assistant.
 
+Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
+and tool set are settled, and changes to them follow semantic versioning.
+
 ## Install
 
 ```bash
@@ -39,7 +42,8 @@ to insert a newline.
 
 AvaDex will call tools (file reads, edits, shell) and prompt before any
 write or shell command unless the action matches your allowlist
-(`~/.config/avadex/allowlist.toml`).
+(`~/.config/avadex/allowlist.toml`, plus a project-local one — see
+[Working directory](#working-directory)).
 
 Pass **`--yes`** (or `-y`) to run the REPL autonomously: every tool call —
 writes and shell included — is auto-approved with no per-action prompt. Use it
@@ -47,6 +51,55 @@ deliberately; it removes the human checkpoint before destructive actions.
 
 ```bash
 avadex --yes    # autonomous REPL: no confirmation prompts
+```
+
+### Working directory
+
+By default AvaDex works in the directory you launch it from. Point it
+somewhere else with `--workdir`:
+
+```bash
+avadex --workdir ~/projects/testsite
+```
+
+Or set a default in `~/.config/avadex/config.toml`:
+
+```toml
+workdir = "/home/you/projects/testsite"
+```
+
+`--workdir` wins over the config value, which wins over the current
+directory. `~` is expanded, and a relative path is resolved against the
+directory you ran the command from. AvaDex `chdir`s into the workdir at
+startup, so everything follows it:
+
+| What | Resolved in the workdir |
+|------|-------------------------|
+| `skills/<name>/SKILL.md` | project skills, merged over global ones |
+| `.mcp.json` + `.env` | project MCP servers |
+| `.avadex/allowlist.toml` | project permission rules |
+| `bash`, `glob`, `grep_files`, relative file paths | the agent's tools |
+
+The `cwd` line in the startup banner shows which directory is in effect.
+A workdir that doesn't exist (or isn't a directory) exits with status 2.
+
+#### Project-local allowlist
+
+`<workdir>/.avadex/allowlist.toml` holds permission rules for one project.
+Its rules are **added to** your global ones rather than replacing them, so a
+project file can only widen what's permitted — your global rules keep working
+everywhere.
+
+When a workdir is in play, `/allow` writes new rules to the project file
+instead of the global one, creating it on demand. The two files are never
+mixed on save, so a project rule can't leak into your global allowlist.
+That makes `.avadex/allowlist.toml` safe to commit when a team shares the
+same safe commands:
+
+```toml
+[[rules]]
+tool = "bash"
+pattern = "npm test *"
 ```
 
 ### Headless / scripted use
@@ -212,10 +265,15 @@ long-running processes.
 
 Treat this like an interactive shell: don't paste prompts from
 untrusted sources, be deliberate about what you add to
-`~/.config/avadex/allowlist.toml`, and review the proposed action in
+`~/.config/avadex/allowlist.toml` or a project's
+`.avadex/allowlist.toml`, and review the proposed action in
 each `[y/n/a]` prompt before pressing `y`.
 
-## Known limitations (v1)
+A project allowlist is read from whatever directory you point AvaDex at, so
+treat a checked-in `.avadex/allowlist.toml` as executable content: read it
+before running AvaDex in a repository you don't control.
+
+## Known limitations
 
 - Ava's `/api/v1/messages` is non-streaming — each turn shows a "..."
   spinner until the response arrives.
