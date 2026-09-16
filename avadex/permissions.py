@@ -38,25 +38,57 @@ def _tool_argument(tool_name: str, args: dict) -> str:
 
 
 class PermissionManager:
-    def __init__(self, allowlist_path: Path):
-        self.path = Path(allowlist_path)
-        self.rules: list[Rule] = self._load()
+    """Allowlist rules from a global file, optionally widened by a
+    project-local one.
 
-    def _load(self) -> list[Rule]:
-        if not self.path.exists():
+    Both files are read and their rules concatenated (global first), so a
+    workdir allowlist can only widen what is permitted, never shadow a global
+    rule. The two rule lists are kept apart on purpose: a save rewrites only
+    the file it came from, so appending a project rule can never flatten the
+    global rules into the project file, or vice versa.
+    """
+
+    def __init__(self, allowlist_path: Path, workdir_path: Path | None = None):
+        self.path = Path(allowlist_path)
+        self.workdir_path = Path(workdir_path) if workdir_path is not None else None
+        self._global_rules: list[Rule] = self._load(self.path)
+        self._workdir_rules: list[Rule] = (
+            self._load(self.workdir_path) if self.workdir_path is not None else []
+        )
+
+    @property
+    def rules(self) -> list[Rule]:
+        """All active rules, global first then workdir."""
+        return self._global_rules + self._workdir_rules
+
+    @property
+    def write_path(self) -> Path:
+        """Where a newly added rule is persisted."""
+        return self.workdir_path if self.workdir_path is not None else self.path
+
+    @staticmethod
+    def _load(path: Path) -> list[Rule]:
+        if not path.exists():
             return []
-        with open(self.path, "rb") as f:
+        with open(path, "rb") as f:
             data = _tomli.load(f)
         return [Rule(tool=r["tool"], pattern=r["pattern"]) for r in data.get("rules", [])]
 
     def _save(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"rules": [{"tool": r.tool, "pattern": r.pattern} for r in self.rules]}
-        with open(self.path, "wb") as f:
+        target = self.write_path
+        owned = (
+            self._workdir_rules if self.workdir_path is not None else self._global_rules
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"rules": [{"tool": r.tool, "pattern": r.pattern} for r in owned]}
+        with open(target, "wb") as f:
             tomli_w.dump(payload, f)
 
     def add_rule(self, rule: Rule):
-        self.rules.append(rule)
+        if self.workdir_path is not None:
+            self._workdir_rules.append(rule)
+        else:
+            self._global_rules.append(rule)
         self._save()
 
     def check(self, tool_name: str, args: dict) -> Decision:
