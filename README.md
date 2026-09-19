@@ -231,6 +231,20 @@ model: `ollama show <model>` on the Ava server lists a `tools` capability, and
 even then a model can emit tool calls as text (AvaDex reports that as an
 error). Test a model with a one-tool `--allow-tools` run before relying on it.
 
+That test only shows that tool calling works, not that the model reads the
+results correctly. A run can end with exit 0 and `is_error: false` and still
+give a wrong answer. Counting a long tool result, for example, is unreliable
+for nearly every model, and the same prompt can give a different number on
+the next run. So for data questions:
+
+- Let a tool produce numbers (a total or a count query). The model should
+  repeat a number, never count items itself.
+- Check existence with a filter ("zero results or not"), not by counting or
+  scanning a full listing.
+- When a fact decides what happens next, such as whether a record already
+  exists before creating one, check the tool result in your own code rather
+  than relying on the model's summary.
+
 ## Tools
 
 Built-in (always available):

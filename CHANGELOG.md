@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.0.1 – 1.0.9)
+## [Unreleased] — on `dev` (1.0.1 – 1.0.10)
 
 Patch-versioned on `dev` and not yet merged to `master`. These are new
 features, so the next release will be a minor bump. Built for Syntec
@@ -57,13 +57,18 @@ Conductor, which drives AvaDex unattended as its runtime for Ava-hosted models.
   the fail-closed path Conductor hit: with `--allow-tools mcp__<server>` and
   a server that won't start, AvaDex exits 2 without calling Ava.
 
-### Docs (1.0.7)
+### Docs (1.0.7, 1.0.10)
 - README documents the new flags, the config precedence table and
   `avadex models`, and fixes three errors: MCP tools are exposed as
   `<server>_<tool>` (not `<server>.<tool>`); `config.toml` needs
   `ava_url`/`ava_token`, and keys come from Ava's API-key admin (optionally
   private) rather than only the env key; `--debug` logs to
   `~/.local/state/avadex/debug.log`, not stderr.
+- README "Listing models" now says that a working tool call doesn't mean the
+  model uses the result correctly, and how to design data questions around
+  that: numbers come from tools, existence checks use filters, and deciding
+  facts are checked in code. Prompted by Syntec Conductor seeing a model
+  count 195 forms as 194 and then 205. (1.0.10)
 
 ### Notes
 - Real token counts need Ava ≥ 0.4.2 (live since Ava 0.4.5). Against older
