@@ -3,6 +3,88 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-09-19
+
+Minor release: AvaDex as an unattended runtime. Built for Syntec Conductor,
+which drives AvaDex headless for Ava-hosted models and now uses it as a
+planning orchestrator as well as for specialists. Everything is additive;
+without the new flags, behaviour is unchanged. Collects patches 1.0.1 – 1.0.12.
+
+### Added
+- **`--allow-tools LIST`** — the caller names exactly which tools a run may
+  use. Everything else is left out of the schemas sent to the model and
+  refused at dispatch (`ToolRegistry.restrict`), so a hallucinated tool name
+  can't get through. Entries: a tool name, `mcp__<server>` (all tools of an
+  MCP server), `mcp__<server>__<tool>`, or the exposed `<server>_<tool>` name.
+  It fails closed: an entry matching no available tool exits 2 before Ava is
+  called, which also catches an MCP server that failed to start. Refusals go
+  to stderr, and the system prompt names the allowed tools. Without the flag,
+  behaviour is unchanged. (1.0.1, 1.0.2)
+- **`--output-format json`** — headless runs print one result object: the
+  answer, errors, summed `usage` (input/output tokens over every Ava request,
+  including tool round-trips, retries and compaction), `usage_complete`,
+  `requested_model` vs the `model`(s) Ava actually ran, request count,
+  duration and `permission_denials`. Shaped after Claude Code's envelope.
+  (1.0.3, 1.0.4)
+- **`--ignore-user-config`** — with `--config`, skip the invoking user's
+  `~/.config/avadex/allowlist.toml` and `~/.config/avadex/skills/`, so a run
+  uses only the given config and the workdir. With no allowlist file at all,
+  `/allow` rules stay in memory for the session. (1.0.5)
+- **`avadex models [--json]`** — list the models Ava's `GET /api/v1/models`
+  accepts, with the default marked. `--json` includes the key's `ava` policy
+  block when Ava sends one. (1.0.6, 1.0.8)
+- **Key-privacy pass-through and `--require-private` (1.0.8).** Ava ≥ 0.4.6
+  echoes the calling key's policy (`"ava": {key, private, rag, retained}`) on
+  every response. The JSON envelope now carries the last one as `ava`, plus
+  `ava_changed` when it differed, appeared or disappeared during the run.
+  `--require-private` fails closed: it checks `GET /api/v1/models` before the
+  prompt is sent, and every response including compaction calls, aborting
+  before that response's tool calls run. Only an explicit `private: true`
+  passes. Prompted by a key that was flipped to shared on the server after
+  a client's startup check had already passed.
+- **Tool transcript in the JSON envelope (1.0.11).** `transcript` lists
+  every tool call with its tool, MCP server, input and output. Output is
+  verbatim and untruncated; image data is replaced by type and size. Each
+  entry's `status` is `ok`, `error` (flagged, not dropped), `no_result`
+  (started, nothing came back) or `not_run` (requested, but the run aborted
+  first). This lets a caller check facts against what the tools returned
+  instead of the model's summary. Requested by Syntec Conductor, which does
+  this with Claude and Codex runs.
+
+### Changed
+- MCP tools now record their server and MCP-side name, so they can be
+  selected per server.
+- `HeadlessRenderer` keeps every error message (`errors`); `errored` is
+  derived from it.
+
+### Fixed (1.0.9)
+- **MCP was dead on a fresh install.** `mcp>=1.0` resolved to SDK 2.x, which
+  renamed `streamablehttp_client`, so every HTTP MCP server failed to start
+  (found by Syntec Conductor). The dependency is now capped at `mcp>=1.0,<2`.
+  A new test imports the real SDK clients without monkeypatching, so an SDK
+  rename fails the suite instead of shipping. A second regression test pins
+  the fail-closed path Conductor hit: with `--allow-tools mcp__<server>` and
+  a server that won't start, AvaDex exits 2 without calling Ava.
+
+### Docs (1.0.7, 1.0.10, 1.0.12)
+- README documents the new flags, the config precedence table and
+  `avadex models`, and fixes three errors: MCP tools are exposed as
+  `<server>_<tool>` (not `<server>.<tool>`); `config.toml` needs
+  `ava_url`/`ava_token`, and keys come from Ava's API-key admin (optionally
+  private) rather than only the env key; `--debug` logs to
+  `~/.local/state/avadex/debug.log`, not stderr.
+- README "Listing models" now says that a working tool call doesn't mean the
+  model uses the result correctly, and how to design data questions around
+  that: numbers come from tools, existence checks use filters, and deciding
+  facts are checked in code. Prompted by Syntec Conductor seeing a model
+  count 195 forms as 194 and then 205. (1.0.10)
+- README and package description: "powered by the Syntec Ava assistant".
+  (1.0.12)
+
+### Notes
+- Real token counts need Ava ≥ 0.4.2 (live since Ava 0.4.5). Against older
+  servers `usage_complete` is `false`.
+
 ## [1.0.0] — 2026-09-16
 
 First stable release. No behavior changes over 0.8.0 — this marks the CLI

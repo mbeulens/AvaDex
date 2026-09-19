@@ -89,3 +89,15 @@ def test_unavailable_tool_filtered_from_names():
     names = reg.names()
     assert "visible" in names
     assert "hidden" not in names
+
+
+def test_tool_server_names_the_mcp_server():
+    reg = ToolRegistry()
+    reg.register(ToolDefinition(name="read_file", description="", input_schema={},
+                                handler=lambda a: ToolResult(content="")))
+    reg.register(ToolDefinition(name="syntec-forms_form_list", description="",
+                                input_schema={}, handler=lambda a: ToolResult(content=""),
+                                server="syntec-forms", inner_name="form_list"))
+    assert reg.tool_server("syntec-forms_form_list") == "syntec-forms"
+    assert reg.tool_server("read_file") is None
+    assert reg.tool_server("nope") is None

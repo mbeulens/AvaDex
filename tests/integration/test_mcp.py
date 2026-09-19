@@ -162,3 +162,14 @@ def test_open_transport_unknown_raises():
     bad = MCPClient(name="x", transport="bogus", url="https://x")
     with pytest.raises(ValueError, match="bogus"):
         _open_transport(bad)
+
+
+def test_open_transport_imports_the_real_sdk_clients():
+    # No monkeypatching: this is the guard for an SDK that renames a client
+    # (mcp 2.x dropped `streamablehttp_client`). The factories only build a
+    # context manager; nothing connects until it is entered.
+    from avadex.tools.mcp import MCPClient, _open_transport
+    for transport, url in (("http", "https://h/mcp"), ("sse", "https://s/sse")):
+        cm = _open_transport(MCPClient(name=transport, transport=transport, url=url,
+                                       headers={"Authorization": "Bearer x"}))
+        assert hasattr(cm, "__aenter__")

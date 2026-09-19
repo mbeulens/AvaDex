@@ -34,6 +34,7 @@ class AvaResponse:
     model: str
     stop_reason: str
     usage: dict = field(default_factory=dict)
+    ava: dict | None = None   # Ava's key-policy block (Ava >= 0.4.6), see avadex.key_policy
 
 
 def parse_block(raw: dict) -> Block:
@@ -59,6 +60,7 @@ def parse_response(raw: dict) -> AvaResponse:
         model=raw.get("model", ""),
         stop_reason=raw.get("stop_reason", "end_turn"),
         usage=raw.get("usage", {}),
+        ava=raw.get("ava") if isinstance(raw.get("ava"), dict) else None,
     )
 
 

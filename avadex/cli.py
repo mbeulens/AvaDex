@@ -1,10 +1,14 @@
 from __future__ import annotations
 import argparse
+import json
 import os
 import sys
+import time
 from getpass import getpass
 from pathlib import Path
 
+from avadex.allow_tools import AllowToolsError, parse_allow_tools, resolve_allowed
+from avadex.key_policy import is_private
 from avadex.config import save_token, load_config, ConfigMissing
 from avadex.mcp_workdir import resolve_mcp_servers
 from avadex.workdir import resolve_workdir, workdir_allowlist_path, WorkdirError
@@ -160,10 +164,17 @@ def _default_or_custom_prompt(cfg) -> str:
     )
 
 
-def _build_system_prompt(cfg, skill_index: str = "") -> str:
+def _build_system_prompt(cfg, skill_index: str = "", allowed: list[str] | None = None) -> str:
     base = _default_or_custom_prompt(cfg)
     if skill_index:
         base = base + "\n\n" + skill_index
+    if allowed is not None:
+        base = base + (
+            "\n\nTOOL RESTRICTION: in this run you can only use these tools: "
+            f"{', '.join(sorted(allowed))}. Any other tool mentioned above is "
+            "unavailable and will be refused — don't try it; work with what you "
+            "have or say what you couldn't do."
+        )
     return base
 
 
@@ -175,6 +186,10 @@ def run_repl(
     model: str | None = None,
     auto_approve: bool = False,
     workdir: Path | None = None,
+    allow_tools: str | None = None,
+    output_format: str = "text",
+    ignore_user_config: bool = False,
+    require_private: bool = False,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -214,7 +229,7 @@ def run_repl(
         registry.register(tool)
 
     cwd = Path.cwd()
-    skills = discover_skills(cwd)
+    skills = discover_skills(cwd, include_global=not ignore_user_config)
     registry.register(make_load_skill_tool(skills))
     _skills_msg = _skills_message(skills)
     if _skills_msg is not None:
@@ -239,17 +254,28 @@ def run_repl(
             log.warning("MCP server '%s' failed to start: %s", s.name, _describe_exc(exc))
     register_mcp_tools(mcp_clients, registry)
 
+    allowed: set[str] | None = None
+    if allow_tools is not None:
+        try:
+            allowed = resolve_allowed(parse_allow_tools(allow_tools), registry)
+        except AllowToolsError as exc:
+            print(str(exc), file=sys.stderr)
+            _stop_mcp(mcp_clients)
+            client.close()
+            return 2
+        registry.restrict(allowed)
+
     # A project allowlist is honored when it already exists, or when the user
     # explicitly chose this workdir (so the first /allow lands in the project).
     project_allowlist = workdir_allowlist_path(cwd)
     permissions = PermissionManager(
-        allowlist_path,
+        None if ignore_user_config else allowlist_path,
         project_allowlist if (workdir_was_set or project_allowlist.exists()) else None,
     )
     initial_model = _resolve_initial_model(cfg, client)
     agent = AgentLoop(
         client=client, registry=registry, permissions=permissions,
-        system_prompt=_build_system_prompt(cfg, render_skill_index(skills)),
+        system_prompt=_build_system_prompt(cfg, render_skill_index(skills), allowed),
         max_context_tokens=cfg.max_context_tokens,
         max_response_tokens=cfg.max_response_tokens,
         model=model or initial_model,
@@ -258,6 +284,7 @@ def run_repl(
         compaction_threshold=cfg.context_compaction_threshold,
         large_output_tokens=cfg.context_large_output_tokens,
         keep_recent=cfg.context_keep_recent,
+        require_private=require_private,
     )
     # Expose registry + permissions on agent for /tools and /allow slash commands
     agent.registry = registry
@@ -268,21 +295,89 @@ def run_repl(
             # The agent's internal tool-use loop still runs as normal (up to
             # max_iterations) — MCP servers and built-in tools are all in play.
             renderer = HeadlessRenderer()
-            agent.run_turn(prompt, renderer)
-            sys.stdout.write(renderer.text)
-            if renderer.text and not renderer.text.endswith("\n"):
-                sys.stdout.write("\n")
+            started = time.monotonic()
+            if not require_private or _preflight_private(client, agent, renderer):
+                agent.run_turn(prompt, renderer)
+            for name in registry.refused:
+                print(f"avadex: refused tool '{name}' (not in --allow-tools)",
+                      file=sys.stderr)
+            if output_format == "json":
+                envelope = _result_envelope(
+                    agent, renderer, registry, requested_model=agent.model,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+                sys.stdout.write(json.dumps(envelope) + "\n")
+            else:
+                sys.stdout.write(renderer.text)
+                if renderer.text and not renderer.text.endswith("\n"):
+                    sys.stdout.write("\n")
             return 1 if renderer.errored else 0
+        if require_private and not _preflight_private(client, agent, HeadlessRenderer()):
+            return 1
         repl = Repl(agent=agent, input_fn=input_fn)
         repl.run()
         return 0
     finally:
-        for mc in mcp_clients:
-            try:
-                mc.stop()
-            except Exception:
-                pass
+        _stop_mcp(mcp_clients)
         client.close()
+
+
+def _result_envelope(agent, renderer, registry, requested_model: str,
+                     duration_ms: int) -> dict:
+    """The --output-format json result: final answer plus token accounting.
+
+    Shaped after Claude Code's result envelope so callers can treat both alike.
+    `model` is what Ava actually ran (it falls back to its default when the
+    requested model isn't installed); `usage_complete` is false when any
+    response came back without real token counts.
+    """
+    usage = agent.usage
+    return {
+        "type": "result",
+        "subtype": "error" if renderer.errored else "success",
+        "is_error": renderer.errored,
+        "result": renderer.text,
+        "errors": list(renderer.errors),
+        "requested_model": requested_model,
+        "model": usage.last_model or requested_model,
+        "models_used": list(usage.models),
+        "usage": usage.as_dict(),
+        "usage_complete": usage.complete,
+        "num_requests": usage.requests,
+        "duration_ms": duration_ms,
+        "permission_denials": [{"tool_name": n} for n in registry.refused],
+        "transcript": [{**call, "server": registry.tool_server(call["tool"])}
+                       for call in renderer.transcript],
+        "ava": agent.policy.last,
+        "ava_changed": agent.policy.changed,
+    }
+
+
+def _preflight_private(client, agent, renderer) -> bool:
+    """--require-private: before any prompt leaves the machine, confirm via
+    GET /api/v1/models that Ava reports this key private. Reports and returns
+    False otherwise (including an Ava too old to report it)."""
+    try:
+        info = client.list_models()
+    except (AvaError, TokenExpired) as exc:
+        renderer.error(f"--require-private: could not check the key policy: {exc}")
+        return False
+    agent.policy.record(info.get("ava"))
+    if not is_private(info.get("ava")):
+        renderer.error(
+            f"Ava reports this API key is not private (ava={info.get('ava')}) — "
+            "refusing to send the prompt (--require-private)"
+        )
+        return False
+    return True
+
+
+def _stop_mcp(mcp_clients) -> None:
+    for mc in mcp_clients:
+        try:
+            mc.stop()
+        except Exception:
+            pass
 
 
 def set_key_command(
@@ -303,6 +398,35 @@ def set_key_command(
     return 0
 
 
+def models_command(config_path: Path, as_json: bool = False) -> int:
+    """List the models Ava accepts (GET /api/v1/models)."""
+    try:
+        cfg = load_config(config_path)
+    except ConfigMissing as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    client = AvaClient(cfg.ava_url, cfg.ava_token)
+    try:
+        info = client.list_models()
+    except (AvaError, TokenExpired) as exc:
+        print(f"could not list models: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        client.close()
+    if as_json:
+        print(json.dumps(info))
+        return 0
+    for m in info["models"]:
+        mid = m.get("id", "") if isinstance(m, dict) else str(m)
+        parts = [mid]
+        if isinstance(m, dict) and m.get("size"):
+            parts.append(m["size"])
+        if mid == info["default"]:
+            parts.append("(default)")
+        print("  ".join(parts))
+    return 0
+
+
 def login_redirect_command() -> int:
     print(
         "'avadex login' is no longer supported — Ava's API uses a static "
@@ -314,7 +438,7 @@ def login_redirect_command() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avadex")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument(
         "--prompt",
@@ -349,20 +473,71 @@ def main(argv: list[str] | None = None) -> int:
              "Overrides 'workdir' in config.toml; defaults to the current "
              "directory.",
     )
+    parser.add_argument(
+        "--allow-tools",
+        default=None,
+        metavar="LIST",
+        help="Comma-separated tools this run may use; every other tool is "
+             "hidden from the model and refused if called. Entries: a tool "
+             "name (read_file), mcp__<server> (all tools of an MCP server) or "
+             "mcp__<server>__<tool>. An entry that matches no available tool "
+             "exits 2. Omit to allow every tool.",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+        help="Headless output. 'text' (default) prints the final answer; "
+             "'json' prints one result object with the answer, token usage, "
+             "the model(s) actually used and any refused tools.",
+    )
+    parser.add_argument(
+        "--ignore-user-config",
+        action="store_true",
+        help="Use only the --config file and the workdir: skip the invoking "
+             "user's ~/.config/avadex/allowlist.toml and ~/.config/avadex/skills. "
+             "Requires --config.",
+    )
+    parser.add_argument(
+        "--require-private",
+        action="store_true",
+        help="Fail closed unless Ava reports this API key private (no RAG, "
+             "nothing learned): checked via /api/v1/models before the prompt is "
+             "sent, and on every response, aborting before that response's tool "
+             "calls run. Needs Ava >= 0.4.6.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
     sub.add_parser("repl")    # also the default
+    models_p = sub.add_parser("models", help="List the models Ava accepts.")
+    models_p.add_argument("--json", action="store_true",
+                          help='Print {"models": [{"id", "size"}], "default": ...}.')
 
     args = parser.parse_args(argv)
     setup_logging(debug=args.debug)
+    if args.ignore_user_config and args.config is None:
+        print("--ignore-user-config requires --config (the default config "
+              "lives in the user's home)", file=sys.stderr)
+        return 2
+    if args.config is None:
+        args.config = DEFAULT_CONFIG
     if args.cmd == "set-key":
         return set_key_command(config_path=args.config)
     if args.cmd == "login":
         return login_redirect_command()
+    if args.cmd == "models":
+        return models_command(args.config, as_json=args.json)
+    if args.output_format == "json" and args.prompt is None:
+        print("--output-format json requires --prompt", file=sys.stderr)
+        return 2
     # Default: REPL (or headless agent if --prompt is given).
     return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
-                    auto_approve=args.yes, workdir=args.workdir)
+                    auto_approve=args.yes, workdir=args.workdir,
+                    allow_tools=args.allow_tools,
+                    output_format=args.output_format,
+                    ignore_user_config=args.ignore_user_config,
+                    require_private=args.require_private)
 
 
 if __name__ == "__main__":

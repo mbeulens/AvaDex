@@ -46,12 +46,17 @@ class PermissionManager:
     rule. The two rule lists are kept apart on purpose: a save rewrites only
     the file it came from, so appending a project rule can never flatten the
     global rules into the project file, or vice versa.
+
+    allowlist_path=None drops the global file (--ignore-user-config); with no
+    file at all, added rules live in memory for the session only.
     """
 
-    def __init__(self, allowlist_path: Path, workdir_path: Path | None = None):
-        self.path = Path(allowlist_path)
+    def __init__(self, allowlist_path: Path | None, workdir_path: Path | None = None):
+        self.path = Path(allowlist_path) if allowlist_path is not None else None
         self.workdir_path = Path(workdir_path) if workdir_path is not None else None
-        self._global_rules: list[Rule] = self._load(self.path)
+        self._global_rules: list[Rule] = (
+            self._load(self.path) if self.path is not None else []
+        )
         self._workdir_rules: list[Rule] = (
             self._load(self.workdir_path) if self.workdir_path is not None else []
         )
@@ -62,7 +67,7 @@ class PermissionManager:
         return self._global_rules + self._workdir_rules
 
     @property
-    def write_path(self) -> Path:
+    def write_path(self) -> Path | None:
         """Where a newly added rule is persisted."""
         return self.workdir_path if self.workdir_path is not None else self.path
 
@@ -76,6 +81,8 @@ class PermissionManager:
 
     def _save(self):
         target = self.write_path
+        if target is None:
+            return
         owned = (
             self._workdir_rules if self.workdir_path is not None else self._global_rules
         )

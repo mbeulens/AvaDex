@@ -165,4 +165,6 @@ def register_mcp_tools(clients: list, registry: ToolRegistry) -> None:
                 input_schema=tool["input_schema"],
                 handler=handler,
                 is_available=lambda _c=client: _c.is_healthy,
+                server=client.name,
+                inner_name=inner_name,
             ))
