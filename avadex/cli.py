@@ -1,7 +1,9 @@
 from __future__ import annotations
 import argparse
+import json
 import os
 import sys
+import time
 from getpass import getpass
 from pathlib import Path
 
@@ -184,6 +186,7 @@ def run_repl(
     auto_approve: bool = False,
     workdir: Path | None = None,
     allow_tools: str | None = None,
+    output_format: str = "text",
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -288,13 +291,21 @@ def run_repl(
             # The agent's internal tool-use loop still runs as normal (up to
             # max_iterations) — MCP servers and built-in tools are all in play.
             renderer = HeadlessRenderer()
+            started = time.monotonic()
             agent.run_turn(prompt, renderer)
             for name in registry.refused:
                 print(f"avadex: refused tool '{name}' (not in --allow-tools)",
                       file=sys.stderr)
-            sys.stdout.write(renderer.text)
-            if renderer.text and not renderer.text.endswith("\n"):
-                sys.stdout.write("\n")
+            if output_format == "json":
+                envelope = _result_envelope(
+                    agent, renderer, registry, requested_model=agent.model,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+                sys.stdout.write(json.dumps(envelope) + "\n")
+            else:
+                sys.stdout.write(renderer.text)
+                if renderer.text and not renderer.text.endswith("\n"):
+                    sys.stdout.write("\n")
             return 1 if renderer.errored else 0
         repl = Repl(agent=agent, input_fn=input_fn)
         repl.run()
@@ -302,6 +313,33 @@ def run_repl(
     finally:
         _stop_mcp(mcp_clients)
         client.close()
+
+
+def _result_envelope(agent, renderer, registry, requested_model: str,
+                     duration_ms: int) -> dict:
+    """The --output-format json result: final answer plus token accounting.
+
+    Shaped after Claude Code's result envelope so callers can treat both alike.
+    `model` is what Ava actually ran (it falls back to its default when the
+    requested model isn't installed); `usage_complete` is false when any
+    response came back without real token counts.
+    """
+    usage = agent.usage
+    return {
+        "type": "result",
+        "subtype": "error" if renderer.errored else "success",
+        "is_error": renderer.errored,
+        "result": renderer.text,
+        "errors": list(renderer.errors),
+        "requested_model": requested_model,
+        "model": usage.last_model or requested_model,
+        "models_used": list(usage.models),
+        "usage": usage.as_dict(),
+        "usage_complete": usage.complete,
+        "num_requests": usage.requests,
+        "duration_ms": duration_ms,
+        "permission_denials": [{"tool_name": n} for n in registry.refused],
+    }
 
 
 def _stop_mcp(mcp_clients) -> None:
@@ -386,6 +424,14 @@ def main(argv: list[str] | None = None) -> int:
              "mcp__<server>__<tool>. An entry that matches no available tool "
              "exits 2. Omit to allow every tool.",
     )
+    parser.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+        help="Headless output. 'text' (default) prints the final answer; "
+             "'json' prints one result object with the answer, token usage, "
+             "the model(s) actually used and any refused tools.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -397,10 +443,14 @@ def main(argv: list[str] | None = None) -> int:
         return set_key_command(config_path=args.config)
     if args.cmd == "login":
         return login_redirect_command()
+    if args.output_format == "json" and args.prompt is None:
+        print("--output-format json requires --prompt", file=sys.stderr)
+        return 2
     # Default: REPL (or headless agent if --prompt is given).
     return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
                     auto_approve=args.yes, workdir=args.workdir,
-                    allow_tools=args.allow_tools)
+                    allow_tools=args.allow_tools,
+                    output_format=args.output_format)
 
 
 if __name__ == "__main__":

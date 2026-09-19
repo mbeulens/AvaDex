@@ -24,7 +24,7 @@ class HeadlessRenderer:
 
     def __init__(self):
         self._buf: list[str] = []
-        self.errored: bool = False
+        self.errors: list[str] = []
 
     def assistant_text(self, text: str) -> None:
         self._buf.append(text)
@@ -41,8 +41,12 @@ class HeadlessRenderer:
         pass
 
     def error(self, text: str) -> None:
-        self.errored = True
+        self.errors.append(text)
         print(text, file=sys.stderr)
+
+    @property
+    def errored(self) -> bool:
+        return bool(self.errors)
 
     @property
     def text(self) -> str:
