@@ -1,4 +1,4 @@
-from avadex.context import estimate_tokens, prune
+from avadex.context import estimate_tokens, fit_context, prune
 
 
 def test_estimate_tokens_simple_string():
@@ -428,3 +428,62 @@ def test_fit_context_full_cascade_preserves_tool_pairing():
 
     # 3. The pipeline actually reduced size (it was well over budget).
     assert sum(estimate_tokens(m) for m in out) < sum(estimate_tokens(m) for m in original)
+
+
+def _has_user_text(messages):
+    """True if some user message carries text, not only tool_results. Models
+    served with Ollama's qwen3.8 renderer reject a request without one."""
+    for m in messages:
+        if m["role"] != "user":
+            continue
+        c = m["content"]
+        if isinstance(c, str) and c.strip():
+            return True
+        if isinstance(c, list) and any(b.get("type") == "text" for b in c):
+            return True
+    return False
+
+
+def _tool_step(i, size):
+    return [
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": f"t{i}", "name": "view_list", "input": {}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": f"t{i}", "content": "v" * size}]},
+    ]
+
+
+def test_fit_context_keeps_a_user_text_message_after_compact_and_prune():
+    # The recent tool results alone exceed the budget, so compaction is
+    # followed by pruning. Pruning must not drop the summary, the only user
+    # text left, or the next request is [assistant, tool_result] only.
+    msgs = [{"role": "user", "content": "list the views of zz_product"}]
+    for i in range(6):
+        msgs += _tool_step(i, 4000)
+    out = fit_context(msgs, max_tokens=3500, threshold=0.8,
+                      summarizer=lambda old: "summary of earlier steps",
+                      large_output_tokens=100_000, keep_recent=6)
+    assert _has_user_text(out)
+    assert out[0]["role"] == "user"
+    assert "summary of earlier steps" in out[0]["content"]
+
+
+def test_prune_keeps_the_leading_user_text_message():
+    msgs = [{"role": "user", "content": "the task"}]
+    for i in range(4):
+        msgs += _tool_step(i, 4000)
+    out = prune(msgs, 3500)
+    assert out[0] == {"role": "user", "content": "the task"}
+    assert out[-1] == msgs[-1]
+
+
+def test_prune_still_pairs_tool_use_and_result_after_the_anchor():
+    msgs = [{"role": "user", "content": "the task"}]
+    for i in range(4):
+        msgs += _tool_step(i, 4000)
+    out = prune(msgs, 3500)
+    ids_used = {b["id"] for m in out if isinstance(m["content"], list)
+                for b in m["content"] if b.get("type") == "tool_use"}
+    ids_res = {b["tool_use_id"] for m in out if isinstance(m["content"], list)
+               for b in m["content"] if b.get("type") == "tool_result"}
+    assert ids_used == ids_res

@@ -3,6 +3,22 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — on `dev` (1.1.1)
+
+### Fixed
+- **Long runs no longer lose their task after compaction (1.1.1).** When the
+  recent tool results alone exceeded the context budget, compaction was
+  followed by pruning, and pruning dropped the oldest message first: the
+  compaction summary, which was the only user text left. The next request was
+  just tool calls and tool results. Models served with Ollama's `qwen3.8`
+  renderer reject that with a 500 "no user query found in messages", and any
+  model would have lost its task. Pruning now always keeps the most recent
+  user message with text (the task or the summary). The retry after Ava
+  reports a context overflow used `messages[4:]`, which could drop the task
+  and split a tool call from its result. It now uses the same rules
+  (`drop_oldest`). Found by Syntec Conductor; diagnosed on the host by
+  ava-deploy.
+
 ## [1.1.0] — 2026-09-19
 
 Minor release: AvaDex as an unattended runtime. Built for Syntec Conductor,

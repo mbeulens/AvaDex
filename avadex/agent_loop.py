@@ -6,7 +6,7 @@ from avadex.types import (
 )
 from avadex.tools.registry import ToolRegistry, ToolResult
 from avadex.permissions import PermissionManager
-from avadex.context import prune, fit_context
+from avadex.context import drop_oldest, fit_context, prune
 from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.renderer import Renderer
 from avadex.spinner import Spinner
@@ -163,8 +163,9 @@ class AgentLoop:
                         model=self.model,
                     )
                 except ContextOverflow:
-                    # Drop two oldest pairs (4 messages) and retry once
-                    self.messages = self.messages[4:] if len(self.messages) > 4 else self.messages[-1:]
+                    # Drop two oldest pairs (4 messages) and retry once, keeping
+                    # the task and tool_use/tool_result pairs intact.
+                    self.messages = drop_oldest(self.messages, 4)
                     try:
                         response = self._request(
                             system=self.system_prompt,
