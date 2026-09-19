@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.1.1)
+## [Unreleased] — on `dev` (1.1.1 – 1.1.2)
 
 ### Fixed
 - **Long runs no longer lose their task after compaction (1.1.1).** When the
@@ -18,6 +18,10 @@ All notable changes to AvaDex are recorded here. The project follows
   and split a tool call from its result. It now uses the same rules
   (`drop_oldest`). Found by Syntec Conductor; diagnosed on the host by
   ava-deploy.
+
+### Docs (1.1.2)
+- README "Known limitations" explains that trimming keeps the task, and
+  why losing it was worse than the error qwen3.8 raised.
 
 ## [1.1.0] — 2026-09-19
 
