@@ -369,6 +369,35 @@ def set_key_command(
     return 0
 
 
+def models_command(config_path: Path, as_json: bool = False) -> int:
+    """List the models Ava accepts (GET /api/v1/models)."""
+    try:
+        cfg = load_config(config_path)
+    except ConfigMissing as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    client = AvaClient(cfg.ava_url, cfg.ava_token)
+    try:
+        info = client.list_models()
+    except (AvaError, TokenExpired) as exc:
+        print(f"could not list models: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        client.close()
+    if as_json:
+        print(json.dumps(info))
+        return 0
+    for m in info["models"]:
+        mid = m.get("id", "") if isinstance(m, dict) else str(m)
+        parts = [mid]
+        if isinstance(m, dict) and m.get("size"):
+            parts.append(m["size"])
+        if mid == info["default"]:
+            parts.append("(default)")
+        print("  ".join(parts))
+    return 0
+
+
 def login_redirect_command() -> int:
     print(
         "'avadex login' is no longer supported — Ava's API uses a static "
@@ -444,6 +473,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
     sub.add_parser("repl")    # also the default
+    models_p = sub.add_parser("models", help="List the models Ava accepts.")
+    models_p.add_argument("--json", action="store_true",
+                          help='Print {"models": [{"id", "size"}], "default": ...}.')
 
     args = parser.parse_args(argv)
     setup_logging(debug=args.debug)
@@ -457,6 +489,8 @@ def main(argv: list[str] | None = None) -> int:
         return set_key_command(config_path=args.config)
     if args.cmd == "login":
         return login_redirect_command()
+    if args.cmd == "models":
+        return models_command(args.config, as_json=args.json)
     if args.output_format == "json" and args.prompt is None:
         print("--output-format json requires --prompt", file=sys.stderr)
         return 2
