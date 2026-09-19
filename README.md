@@ -1,6 +1,6 @@
 # AvaDex
 
-Local CLI agent powered by Ana's self-hosted Ava assistant.
+Local CLI agent powered by the Syntec Ava assistant.
 
 Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
 and tool set are settled, and changes to them follow semantic versioning.

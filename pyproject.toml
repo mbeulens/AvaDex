@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avadex"
-version = "1.0.11"
-description = "Local CLI agent powered by Ana's Ava assistant"
+version = "1.0.12"
+description = "Local CLI agent powered by the Syntec Ava assistant"
 authors = [{name = "Martijn Beulens", email = "m.beulens@syntec-it.nl"}]
 requires-python = ">=3.11"
 dependencies = [
