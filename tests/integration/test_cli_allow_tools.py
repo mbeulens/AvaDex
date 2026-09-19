@@ -3,6 +3,10 @@ import json
 import os
 
 import pytest
+# Import before any test's capsys is active: stdio_client binds
+# `errlog=sys.stderr` as a default at import time, and capsys's stand-in has
+# no fileno(), which would break every later stdio MCP spawn in the session.
+import mcp.client.stdio  # noqa: F401
 
 from avadex.cli import main, run_repl
 
@@ -103,3 +107,20 @@ def test_without_flag_all_tools_are_sent(tmp_path, httpx_mock, restore_cwd):
     )
     names = _tool_names_sent(httpx_mock.get_requests()[0])
     assert "bash" in names and "write_file" in names
+
+
+def test_mcp_server_that_fails_to_start_exits_2_and_sends_nothing(
+        tmp_path, httpx_mock, restore_cwd, capsys):
+    # A broken MCP server must not turn into an unrestricted run, nor a run
+    # with no tools: its tools are never registered, so the allow entry
+    # matches nothing and AvaDex refuses before calling Ava.
+    (tmp_path / ".mcp.json").write_text(json.dumps(
+        {"mcpServers": {"broken": {"command": str(tmp_path / "no-such-binary")}}}))
+    rc = run_repl(
+        config_path=_config(tmp_path), allowlist_path=tmp_path / "allow.toml",
+        workdir=tmp_path, prompt="hi", allow_tools="mcp__broken",
+    )
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "mcp__broken" in err
+    assert httpx_mock.get_requests() == []

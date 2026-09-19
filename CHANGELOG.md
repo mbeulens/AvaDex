@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.0.1 – 1.0.8)
+## [Unreleased] — on `dev` (1.0.1 – 1.0.9)
 
 Patch-versioned on `dev` and not yet merged to `master`. These are new
 features, so the next release will be a minor bump. Built for Syntec
@@ -47,6 +47,15 @@ Conductor, which drives AvaDex unattended as its runtime for Ava-hosted models.
   selected per server.
 - `HeadlessRenderer` keeps every error message (`errors`); `errored` is
   derived from it.
+
+### Fixed (1.0.9)
+- **MCP was dead on a fresh install.** `mcp>=1.0` resolved to SDK 2.x, which
+  renamed `streamablehttp_client`, so every HTTP MCP server failed to start
+  (found by Syntec Conductor). The dependency is now capped at `mcp>=1.0,<2`.
+  A new test imports the real SDK clients without monkeypatching, so an SDK
+  rename fails the suite instead of shipping. A second regression test pins
+  the fail-closed path Conductor hit: with `--allow-tools mcp__<server>` and
+  a server that won't start, AvaDex exits 2 without calling Ava.
 
 ### Docs (1.0.7)
 - README documents the new flags, the config precedence table and
