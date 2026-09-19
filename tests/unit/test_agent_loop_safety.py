@@ -76,3 +76,20 @@ def test_repeated_output_detection(tmp_path):
     # Should abort after 3 identical text+tool combos, never reaching call 4
     assert client.n == 3
     assert any(e[0] == "error" and "repeated" in e[1].lower() for e in renderer.events)
+
+
+def test_repeat_abort_reports_the_unrun_calls(tmp_path):
+    # The third identical response's tool call is never executed. It must be
+    # reported, so a transcript can't look complete when it isn't.
+    client = RepeatingTextClient()
+    pm = PermissionManager(tmp_path / "allow.toml")
+    pm.add_rule(Rule(tool="loop", pattern="*"))
+    loop = AgentLoop(
+        client=client, registry=make_registry(), permissions=pm,
+        system_prompt="", max_context_tokens=100000,
+    )
+    renderer = RecordingRenderer()
+    loop.run_turn("go", renderer)
+    skipped = [e for e in renderer.events if e[0] == "tool_skipped"]
+    assert skipped == [("tool_skipped", "loop", {}, "repeated output detected")]
+    assert sum(1 for e in renderer.events if e[0] == "tool_call") == 2

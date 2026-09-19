@@ -346,6 +346,8 @@ def _result_envelope(agent, renderer, registry, requested_model: str,
         "num_requests": usage.requests,
         "duration_ms": duration_ms,
         "permission_denials": [{"tool_name": n} for n in registry.refused],
+        "transcript": [{**call, "server": registry.tool_server(call["tool"])}
+                       for call in renderer.transcript],
         "ava": agent.policy.last,
         "ava_changed": agent.policy.changed,
     }

@@ -52,6 +52,11 @@ class ToolRegistry:
     def _permitted(self, name: str) -> bool:
         return self._allowed is None or name in self._allowed
 
+    def tool_server(self, name: str) -> str | None:
+        """The MCP server a tool comes from, None for built-ins or unknown names."""
+        tool = self._tools.get(name)
+        return (tool.server or None) if tool else None
+
     def all_tools(self) -> list[ToolDefinition]:
         """Every registered tool, ignoring availability and restriction."""
         return list(self._tools.values())

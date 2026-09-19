@@ -166,6 +166,10 @@ after Claude Code's result envelope):
  "requested_model": "gemma4:26b", "model": "gemma4:26b", "models_used": ["gemma4:26b"],
  "usage": {"input_tokens": 3398, "output_tokens": 91}, "usage_complete": true,
  "num_requests": 3, "duration_ms": 5120, "permission_denials": [],
+ "transcript": [
+   {"tool": "syntec-forms_form_list", "server": "syntec-forms", "input": {},
+    "output": "[{\"id\":\"45\",\"name\":\"Aanhef\"}, ...]",
+    "is_error": false, "status": "ok"}],
  "ava": {"key": "my-key", "private": true, "rag": false, "retained": false},
  "ava_changed": false}
 ```
@@ -180,6 +184,20 @@ after Claude Code's result envelope):
 - `ava` is the key-privacy block from Ava's last response (`null` against
   Ava < 0.4.6). `ava_changed` is true when it differed, appeared or
   disappeared between requests in the run.
+- `transcript` lists every tool call in order: the `tool`, its MCP `server`
+  (`null` for built-ins), the `input`, and the `output` **verbatim and
+  untruncated**. Read deciding facts ("does this record exist?") from here,
+  not from the model's `result`. `status` is one of:
+  - `ok`: the call ran and returned `output`.
+  - `error`: the call failed, was refused or was denied. `output` is the
+    error text. Don't treat it as evidence.
+  - `no_result`: the call started but no result came back. `output` is `null`.
+  - `not_run`: the model asked for it, but the run aborted first (`reason`
+    says why). `output` is `null`.
+
+  An image result (`attach_image`) is recorded as its media type and size in
+  bytes, not the image data. The transcript holds no model reasoning or
+  message history.
 - A failed run still prints the envelope (`is_error: true`) and exits 1.
   `--output-format json` without `--prompt` exits 2.
 

@@ -111,3 +111,38 @@ def test_json_requires_prompt(tmp_path, capsys):
     rc = main(["--config", str(_config(tmp_path)), "--output-format", "json"])
     assert rc == 2
     assert "--prompt" in capsys.readouterr().err
+
+
+def test_envelope_carries_the_tool_transcript(tmp_path, httpx_mock, restore_cwd, capsys):
+    (tmp_path / "forms.txt").write_text("Aanhef\nOfferte\n")
+    httpx_mock.add_response(
+        method="POST", url="https://ava.test/api/v1/messages",
+        json={"content": [{"type": "tool_use", "id": "t1", "name": "read_file",
+                           "input": {"path": "forms.txt"}},
+                          {"type": "tool_use", "id": "t2", "name": "bash",
+                           "input": {"command": "ls"}}],
+              "model": "gemma4", "stop_reason": "tool_use", "usage": {}},
+    )
+    httpx_mock.add_response(
+        method="POST", url="https://ava.test/api/v1/messages",
+        json={"content": [{"type": "text", "text": "2 forms"}], "model": "gemma4",
+              "stop_reason": "end_turn", "usage": {}},
+    )
+    rc = _run(tmp_path, "--allow-tools", "read_file")
+    assert rc == 0
+    t = json.loads(capsys.readouterr().out)["transcript"]
+    assert [e["tool"] for e in t] == ["read_file", "bash"]
+    assert "Aanhef" in t[0]["output"] and "Offerte" in t[0]["output"]
+    assert t[0]["is_error"] is False and t[0]["status"] == "ok"
+    assert t[0]["server"] is None            # built-in tool
+    assert t[1]["is_error"] is True and t[1]["status"] == "error"   # refused
+
+
+def test_envelope_transcript_empty_without_tools(tmp_path, httpx_mock, restore_cwd, capsys):
+    httpx_mock.add_response(
+        method="POST", url="https://ava.test/api/v1/messages",
+        json={"content": [{"type": "text", "text": "x"}], "model": "gemma4",
+              "stop_reason": "end_turn", "usage": {}},
+    )
+    _run(tmp_path)
+    assert json.loads(capsys.readouterr().out)["transcript"] == []

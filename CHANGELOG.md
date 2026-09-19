@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.0.1 – 1.0.10)
+## [Unreleased] — on `dev` (1.0.1 – 1.0.11)
 
 Patch-versioned on `dev` and not yet merged to `master`. These are new
 features, so the next release will be a minor bump. Built for Syntec
@@ -41,6 +41,14 @@ Conductor, which drives AvaDex unattended as its runtime for Ava-hosted models.
   before that response's tool calls run. Only an explicit `private: true`
   passes. Prompted by a key that was flipped to shared on the server after
   a client's startup check had already passed.
+- **Tool transcript in the JSON envelope (1.0.11).** `transcript` lists
+  every tool call with its tool, MCP server, input and output. Output is
+  verbatim and untruncated; image data is replaced by type and size. Each
+  entry's `status` is `ok`, `error` (flagged, not dropped), `no_result`
+  (started, nothing came back) or `not_run` (requested, but the run aborted
+  first). This lets a caller check facts against what the tools returned
+  instead of the model's summary. Requested by Syntec Conductor, which does
+  this with Claude and Codex runs.
 
 ### Changed
 - MCP tools now record their server and MCP-side name, so they can be

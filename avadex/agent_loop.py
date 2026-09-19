@@ -201,6 +201,10 @@ class AgentLoop:
             recent_signatures.append(signature)
             if len(recent_signatures) >= 3 and len(set(recent_signatures[-3:])) == 1:
                 renderer.error("repeated output detected — aborting to avoid infinite loop")
+                skipped = getattr(renderer, "tool_skipped", None)
+                if skipped is not None:
+                    for block in iter_tool_use_blocks(response.content):
+                        skipped(block.name, block.input, "repeated output detected")
                 return
 
             tool_results = self._execute_tools(response.content, renderer)
