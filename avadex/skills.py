@@ -52,12 +52,17 @@ def _parse_skill_file(path: Path, source: str) -> Skill | None:
                  path=path, source=source)
 
 
-def discover_skills(cwd: Path) -> dict[str, Skill]:
+def discover_skills(cwd: Path, include_global: bool = True) -> dict[str, Skill]:
     """Discover skills from the global dir then the workdir dir. Workdir skills
-    override global ones on name clash. Keyed by skill name."""
+    override global ones on name clash. Keyed by skill name.
+
+    include_global=False skips the invoking user's ~/.config/avadex/skills
+    (--ignore-user-config)."""
     skills: dict[str, Skill] = {}
-    for base, source in ((GLOBAL_SKILLS_DIR, "global"),
-                         (cwd / WORKDIR_SKILLS_DIRNAME, "workdir")):
+    sources = [(cwd / WORKDIR_SKILLS_DIRNAME, "workdir")]
+    if include_global:
+        sources.insert(0, (GLOBAL_SKILLS_DIR, "global"))
+    for base, source in sources:
         if not base.is_dir():
             continue
         for skill_md in sorted(base.glob("*/SKILL.md")):

@@ -187,6 +187,7 @@ def run_repl(
     workdir: Path | None = None,
     allow_tools: str | None = None,
     output_format: str = "text",
+    ignore_user_config: bool = False,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -226,7 +227,7 @@ def run_repl(
         registry.register(tool)
 
     cwd = Path.cwd()
-    skills = discover_skills(cwd)
+    skills = discover_skills(cwd, include_global=not ignore_user_config)
     registry.register(make_load_skill_tool(skills))
     _skills_msg = _skills_message(skills)
     if _skills_msg is not None:
@@ -266,7 +267,7 @@ def run_repl(
     # explicitly chose this workdir (so the first /allow lands in the project).
     project_allowlist = workdir_allowlist_path(cwd)
     permissions = PermissionManager(
-        allowlist_path,
+        None if ignore_user_config else allowlist_path,
         project_allowlist if (workdir_was_set or project_allowlist.exists()) else None,
     )
     initial_model = _resolve_initial_model(cfg, client)
@@ -379,7 +380,7 @@ def login_redirect_command() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avadex")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument(
         "--prompt",
@@ -432,6 +433,13 @@ def main(argv: list[str] | None = None) -> int:
              "'json' prints one result object with the answer, token usage, "
              "the model(s) actually used and any refused tools.",
     )
+    parser.add_argument(
+        "--ignore-user-config",
+        action="store_true",
+        help="Use only the --config file and the workdir: skip the invoking "
+             "user's ~/.config/avadex/allowlist.toml and ~/.config/avadex/skills. "
+             "Requires --config.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -439,6 +447,12 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     setup_logging(debug=args.debug)
+    if args.ignore_user_config and args.config is None:
+        print("--ignore-user-config requires --config (the default config "
+              "lives in the user's home)", file=sys.stderr)
+        return 2
+    if args.config is None:
+        args.config = DEFAULT_CONFIG
     if args.cmd == "set-key":
         return set_key_command(config_path=args.config)
     if args.cmd == "login":
@@ -450,7 +464,8 @@ def main(argv: list[str] | None = None) -> int:
     return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
                     auto_approve=args.yes, workdir=args.workdir,
                     allow_tools=args.allow_tools,
-                    output_format=args.output_format)
+                    output_format=args.output_format,
+                    ignore_user_config=args.ignore_user_config)
 
 
 if __name__ == "__main__":
