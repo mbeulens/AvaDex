@@ -10,6 +10,7 @@ from avadex.context import prune, fit_context
 from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.renderer import Renderer
 from avadex.spinner import Spinner
+from avadex.usage import UsageTotals
 
 MAX_ITERATIONS = 50
 
@@ -85,10 +86,18 @@ class AgentLoop:
         self.large_output_tokens = large_output_tokens
         self.keep_recent = keep_recent
         self.messages: list[dict] = []
+        self.usage = UsageTotals()
         self.prompt_user = prompt_user or (lambda tool, args: ("deny", None))
 
     def clear(self):
         self.messages = []
+
+    def _request(self, **kwargs) -> AvaResponse:
+        """One Ava round-trip, with its token usage recorded."""
+        with Spinner():
+            response = self.client.messages(**kwargs)
+        self.usage.record(response)
+        return response
 
     def _fit(self) -> list[dict]:
         return fit_context(
@@ -103,14 +112,13 @@ class AgentLoop:
     def _summarize(self, old: list[dict]) -> "str | None":
         bounded = prune(old, self.max_context_tokens)
         try:
-            with Spinner():
-                resp = self.client.messages(
-                    system=COMPACTION_SYSTEM_PROMPT,
-                    messages=bounded + [{"role": "user", "content": COMPACTION_INSTRUCTION}],
-                    tools=[],
-                    max_tokens=self.max_response_tokens,
-                    model=self.model,
-                )
+            resp = self._request(
+                system=COMPACTION_SYSTEM_PROMPT,
+                messages=bounded + [{"role": "user", "content": COMPACTION_INSTRUCTION}],
+                tools=[],
+                max_tokens=self.max_response_tokens,
+                model=self.model,
+            )
         except (AvaError, ContextOverflow, TokenExpired):
             return None
         text = "".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
@@ -127,26 +135,24 @@ class AgentLoop:
             self.messages = self._fit()
             try:
                 try:
-                    with Spinner():
-                        response: AvaResponse = self.client.messages(
+                    response: AvaResponse = self._request(
+                        system=self.system_prompt,
+                        messages=self.messages,
+                        tools=self.registry.schemas(),
+                        max_tokens=self.max_response_tokens,
+                        model=self.model,
+                    )
+                except ContextOverflow:
+                    # Drop two oldest pairs (4 messages) and retry once
+                    self.messages = self.messages[4:] if len(self.messages) > 4 else self.messages[-1:]
+                    try:
+                        response = self._request(
                             system=self.system_prompt,
                             messages=self.messages,
                             tools=self.registry.schemas(),
                             max_tokens=self.max_response_tokens,
                             model=self.model,
                         )
-                except ContextOverflow:
-                    # Drop two oldest pairs (4 messages) and retry once
-                    self.messages = self.messages[4:] if len(self.messages) > 4 else self.messages[-1:]
-                    try:
-                        with Spinner():
-                            response = self.client.messages(
-                                system=self.system_prompt,
-                                messages=self.messages,
-                                tools=self.registry.schemas(),
-                                max_tokens=self.max_response_tokens,
-                                model=self.model,
-                            )
                     except ContextOverflow:
                         renderer.error("context too full even after pruning; run /clear")
                         return
