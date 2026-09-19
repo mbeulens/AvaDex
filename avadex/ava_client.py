@@ -127,6 +127,8 @@ class AvaClient:
                 "models": list(data.get("models", [])),
                 "default": data.get("default", ""),
             }
+            if isinstance(data.get("ava"), dict):
+                result["ava"] = data["ava"]   # the calling key's privacy policy
             log.debug("GET /api/v1/models default=%s count=%d", result["default"], len(result["models"]))
             return result
         except (ValueError, KeyError) as exc:

@@ -5,7 +5,7 @@ Local CLI agent powered by Ana's self-hosted Ava assistant.
 Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
 and tool set are settled, and changes to them follow semantic versioning.
 The flags added since (`--allow-tools`, `--output-format`,
-`--ignore-user-config`, `avadex models`) are covered too.
+`--ignore-user-config`, `--require-private`, `avadex models`) are covered too.
 
 ## Install
 
@@ -129,7 +129,7 @@ For unattended runs (another program driving AvaDex), combine the flags below:
 
 ```bash
 avadex --config run/avadex.toml --ignore-user-config --workdir run \
-       --allow-tools read_file,grep_files,mcp__syntec-forms \
+       --allow-tools read_file,grep_files,mcp__syntec-forms --require-private \
        --output-format json --model gemma4:26b --prompt "..."
 ```
 
@@ -165,7 +165,9 @@ after Claude Code's result envelope):
  "result": "<final answer>", "errors": [],
  "requested_model": "gemma4:26b", "model": "gemma4:26b", "models_used": ["gemma4:26b"],
  "usage": {"input_tokens": 3398, "output_tokens": 91}, "usage_complete": true,
- "num_requests": 3, "duration_ms": 5120, "permission_denials": []}
+ "num_requests": 3, "duration_ms": 5120, "permission_denials": [],
+ "ava": {"key": "my-key", "private": true, "rag": false, "retained": false},
+ "ava_changed": false}
 ```
 
 - `usage` sums every Ava request in the run: tool round-trips, retries and
@@ -175,8 +177,28 @@ after Claude Code's result envelope):
   not zero.
 - **Compare `requested_model` with `model`.** Ava silently falls back to its
   default when the requested model isn't installed. `model` is what ran.
+- `ava` is the key-privacy block from Ava's last response (`null` against
+  Ava < 0.4.6). `ava_changed` is true when it differed, appeared or
+  disappeared between requests in the run.
 - A failed run still prints the envelope (`is_error: true`) and exits 1.
   `--output-format json` without `--prompt` exits 2.
+
+#### Private keys only: `--require-private`
+
+Ava can mark an API key **private**: no RAG for its requests, and nothing it
+sends is learned into Ava's knowledge base. `--require-private` makes AvaDex
+fail closed unless Ava confirms that for the key it's using:
+
+- **Before the prompt is sent**, it checks `GET /api/v1/models`. If the key is
+  not reported as private, nothing is sent to `/messages` and the run exits 1.
+- **On every response** (including context-compaction calls), if the key stops
+  being reported as private, the run aborts at once, before that response's
+  tool calls execute or another request goes out.
+
+Only an explicit `"private": true` passes. A missing block (Ava < 0.4.6)
+counts as not private. The request whose response reveals a flip has already
+reached Ava, so this bounds a mid-run change to one request. It can't make
+that request unhappen.
 
 #### Using only the caller's config: `--ignore-user-config`
 

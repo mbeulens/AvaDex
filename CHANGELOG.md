@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.0.1 – 1.0.7)
+## [Unreleased] — on `dev` (1.0.1 – 1.0.8)
 
 Patch-versioned on `dev` and not yet merged to `master`. These are new
 features, so the next release will be a minor bump. Built for Syntec
@@ -30,7 +30,17 @@ Conductor, which drives AvaDex unattended as its runtime for Ava-hosted models.
   uses only the given config and the workdir. With no allowlist file at all,
   `/allow` rules stay in memory for the session. (1.0.5)
 - **`avadex models [--json]`** — list the models Ava's `GET /api/v1/models`
-  accepts, with the default marked. (1.0.6)
+  accepts, with the default marked. `--json` includes the key's `ava` policy
+  block when Ava sends one. (1.0.6, 1.0.8)
+- **Key-privacy pass-through and `--require-private` (1.0.8).** Ava ≥ 0.4.6
+  echoes the calling key's policy (`"ava": {key, private, rag, retained}`) on
+  every response. The JSON envelope now carries the last one as `ava`, plus
+  `ava_changed` when it differed, appeared or disappeared during the run.
+  `--require-private` fails closed: it checks `GET /api/v1/models` before the
+  prompt is sent, and every response including compaction calls, aborting
+  before that response's tool calls run. Only an explicit `private: true`
+  passes. Prompted by a key that was flipped to shared on the server after
+  a client's startup check had already passed.
 
 ### Changed
 - MCP tools now record their server and MCP-side name, so they can be

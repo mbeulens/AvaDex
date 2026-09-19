@@ -8,6 +8,7 @@ from getpass import getpass
 from pathlib import Path
 
 from avadex.allow_tools import AllowToolsError, parse_allow_tools, resolve_allowed
+from avadex.key_policy import is_private
 from avadex.config import save_token, load_config, ConfigMissing
 from avadex.mcp_workdir import resolve_mcp_servers
 from avadex.workdir import resolve_workdir, workdir_allowlist_path, WorkdirError
@@ -188,6 +189,7 @@ def run_repl(
     allow_tools: str | None = None,
     output_format: str = "text",
     ignore_user_config: bool = False,
+    require_private: bool = False,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -282,6 +284,7 @@ def run_repl(
         compaction_threshold=cfg.context_compaction_threshold,
         large_output_tokens=cfg.context_large_output_tokens,
         keep_recent=cfg.context_keep_recent,
+        require_private=require_private,
     )
     # Expose registry + permissions on agent for /tools and /allow slash commands
     agent.registry = registry
@@ -293,7 +296,8 @@ def run_repl(
             # max_iterations) — MCP servers and built-in tools are all in play.
             renderer = HeadlessRenderer()
             started = time.monotonic()
-            agent.run_turn(prompt, renderer)
+            if not require_private or _preflight_private(client, agent, renderer):
+                agent.run_turn(prompt, renderer)
             for name in registry.refused:
                 print(f"avadex: refused tool '{name}' (not in --allow-tools)",
                       file=sys.stderr)
@@ -308,6 +312,8 @@ def run_repl(
                 if renderer.text and not renderer.text.endswith("\n"):
                     sys.stdout.write("\n")
             return 1 if renderer.errored else 0
+        if require_private and not _preflight_private(client, agent, HeadlessRenderer()):
+            return 1
         repl = Repl(agent=agent, input_fn=input_fn)
         repl.run()
         return 0
@@ -340,7 +346,28 @@ def _result_envelope(agent, renderer, registry, requested_model: str,
         "num_requests": usage.requests,
         "duration_ms": duration_ms,
         "permission_denials": [{"tool_name": n} for n in registry.refused],
+        "ava": agent.policy.last,
+        "ava_changed": agent.policy.changed,
     }
+
+
+def _preflight_private(client, agent, renderer) -> bool:
+    """--require-private: before any prompt leaves the machine, confirm via
+    GET /api/v1/models that Ava reports this key private. Reports and returns
+    False otherwise (including an Ava too old to report it)."""
+    try:
+        info = client.list_models()
+    except (AvaError, TokenExpired) as exc:
+        renderer.error(f"--require-private: could not check the key policy: {exc}")
+        return False
+    agent.policy.record(info.get("ava"))
+    if not is_private(info.get("ava")):
+        renderer.error(
+            f"Ava reports this API key is not private (ava={info.get('ava')}) — "
+            "refusing to send the prompt (--require-private)"
+        )
+        return False
+    return True
 
 
 def _stop_mcp(mcp_clients) -> None:
@@ -469,6 +496,14 @@ def main(argv: list[str] | None = None) -> int:
              "user's ~/.config/avadex/allowlist.toml and ~/.config/avadex/skills. "
              "Requires --config.",
     )
+    parser.add_argument(
+        "--require-private",
+        action="store_true",
+        help="Fail closed unless Ava reports this API key private (no RAG, "
+             "nothing learned): checked via /api/v1/models before the prompt is "
+             "sent, and on every response, aborting before that response's tool "
+             "calls run. Needs Ava >= 0.4.6.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -499,7 +534,8 @@ def main(argv: list[str] | None = None) -> int:
                     auto_approve=args.yes, workdir=args.workdir,
                     allow_tools=args.allow_tools,
                     output_format=args.output_format,
-                    ignore_user_config=args.ignore_user_config)
+                    ignore_user_config=args.ignore_user_config,
+                    require_private=args.require_private)
 
 
 if __name__ == "__main__":

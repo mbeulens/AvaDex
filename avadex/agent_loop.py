@@ -11,6 +11,7 @@ from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.renderer import Renderer
 from avadex.spinner import Spinner
 from avadex.usage import UsageTotals
+from avadex.key_policy import KeyNotPrivate, PolicyTracker, is_private
 
 MAX_ITERATIONS = 50
 
@@ -73,6 +74,7 @@ class AgentLoop:
         compaction_threshold: float = 0.8,
         large_output_tokens: int = 1000,
         keep_recent: int = 6,
+        require_private: bool = False,
     ):
         self.client = client
         self.registry = registry
@@ -87,16 +89,28 @@ class AgentLoop:
         self.keep_recent = keep_recent
         self.messages: list[dict] = []
         self.usage = UsageTotals()
+        self.policy = PolicyTracker()
+        self.require_private = require_private
         self.prompt_user = prompt_user or (lambda tool, args: ("deny", None))
 
     def clear(self):
         self.messages = []
 
     def _request(self, **kwargs) -> AvaResponse:
-        """One Ava round-trip, with its token usage recorded."""
+        """One Ava round-trip, with its token usage and key policy recorded.
+
+        Under require_private a response that isn't explicitly private stops
+        the run here, before any of its tool calls execute or another request
+        is sent."""
         with Spinner():
             response = self.client.messages(**kwargs)
         self.usage.record(response)
+        self.policy.record(response.ava)
+        if self.require_private and not is_private(response.ava):
+            raise KeyNotPrivate(
+                f"Ava reports this API key is not private (ava={response.ava}) — "
+                "aborting (--require-private)"
+            )
         return response
 
     def _fit(self) -> list[dict]:
@@ -119,6 +133,8 @@ class AgentLoop:
                 max_tokens=self.max_response_tokens,
                 model=self.model,
             )
+        except KeyNotPrivate:
+            raise   # a privacy stop must end the run, not fall back to pruning
         except (AvaError, ContextOverflow, TokenExpired):
             return None
         text = "".join(b.text for b in resp.content if isinstance(b, TextBlock) and b.text)
@@ -132,7 +148,11 @@ class AgentLoop:
         recent_signatures: list[str] = []
 
         for _ in range(self.max_iterations):
-            self.messages = self._fit()
+            try:
+                self.messages = self._fit()
+            except KeyNotPrivate as exc:
+                renderer.error(str(exc))
+                return
             try:
                 try:
                     response: AvaResponse = self._request(
