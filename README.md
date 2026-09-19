@@ -4,8 +4,9 @@ Local CLI agent powered by the Syntec Ava assistant.
 
 Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
 and tool set are settled, and changes to them follow semantic versioning.
-The flags added since (`--allow-tools`, `--output-format`,
-`--ignore-user-config`, `--require-private`, `avadex models`) are covered too.
+The flags added in 1.1 (`--allow-tools`, `--output-format`,
+`--ignore-user-config`, `--require-private`, `avadex models`) and the fields
+of the `--output-format json` envelope are covered too.
 
 ## Install
 
