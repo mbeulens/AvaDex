@@ -3,6 +3,53 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — on `dev` (1.0.1 – 1.0.7)
+
+Patch-versioned on `dev` and not yet merged to `master`. These are new
+features, so the next release will be a minor bump. Built for Syntec
+Conductor, which drives AvaDex unattended as its runtime for Ava-hosted models.
+
+### Added
+- **`--allow-tools LIST`** — the caller names exactly which tools a run may
+  use. Everything else is left out of the schemas sent to the model and
+  refused at dispatch (`ToolRegistry.restrict`), so a hallucinated tool name
+  can't get through. Entries: a tool name, `mcp__<server>` (all tools of an
+  MCP server), `mcp__<server>__<tool>`, or the exposed `<server>_<tool>` name.
+  It fails closed: an entry matching no available tool exits 2 before Ava is
+  called, which also catches an MCP server that failed to start. Refusals go
+  to stderr, and the system prompt names the allowed tools. Without the flag,
+  behaviour is unchanged. (1.0.1, 1.0.2)
+- **`--output-format json`** — headless runs print one result object: the
+  answer, errors, summed `usage` (input/output tokens over every Ava request,
+  including tool round-trips, retries and compaction), `usage_complete`,
+  `requested_model` vs the `model`(s) Ava actually ran, request count,
+  duration and `permission_denials`. Shaped after Claude Code's envelope.
+  (1.0.3, 1.0.4)
+- **`--ignore-user-config`** — with `--config`, skip the invoking user's
+  `~/.config/avadex/allowlist.toml` and `~/.config/avadex/skills/`, so a run
+  uses only the given config and the workdir. With no allowlist file at all,
+  `/allow` rules stay in memory for the session. (1.0.5)
+- **`avadex models [--json]`** — list the models Ava's `GET /api/v1/models`
+  accepts, with the default marked. (1.0.6)
+
+### Changed
+- MCP tools now record their server and MCP-side name, so they can be
+  selected per server.
+- `HeadlessRenderer` keeps every error message (`errors`); `errored` is
+  derived from it.
+
+### Docs (1.0.7)
+- README documents the new flags, the config precedence table and
+  `avadex models`, and fixes three errors: MCP tools are exposed as
+  `<server>_<tool>` (not `<server>.<tool>`); `config.toml` needs
+  `ava_url`/`ava_token`, and keys come from Ava's API-key admin (optionally
+  private) rather than only the env key; `--debug` logs to
+  `~/.local/state/avadex/debug.log`, not stderr.
+
+### Notes
+- Real token counts need Ava ≥ 0.4.2 (live since Ava 0.4.5). Against older
+  servers `usage_complete` is `false`.
+
 ## [1.0.0] — 2026-09-16
 
 First stable release. No behavior changes over 0.8.0 — this marks the CLI

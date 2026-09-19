@@ -4,6 +4,8 @@ Local CLI agent powered by Ana's self-hosted Ava assistant.
 
 Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
 and tool set are settled, and changes to them follow semantic versioning.
+The flags added since (`--allow-tools`, `--output-format`,
+`--ignore-user-config`, `avadex models`) are covered too.
 
 ## Install
 
@@ -15,14 +17,17 @@ pipx install .
 
 ```bash
 avadex set-key
-# Enter your Ava URL (e.g. https://ava.example.com) and the value of
-# AVA_SYNTEC_API_KEY from the Ava server's environment.
-# Saves both to ~/.config/avadex/config.toml
+# Enter your Ava URL (e.g. https://ava.example.com) and an Ava API key.
+# Saves both to ~/.config/avadex/config.toml as ava_url / ava_token.
 ```
 
-The API key is the value of `AVA_SYNTEC_API_KEY` on the Ava server. Find it with
-`systemctl show ava | grep AVA_SYNTEC_API_KEY` or check the systemd unit /
-`.env` file. If unset, the default is `"syntec-ava-local"`.
+Get an API key from an Ava admin: the **API keys** screen in Ava, or
+`api_keys.py --add-key <label>` on the Ava server. Ask for a **private** key if
+you'll send customer data: Ava then skips RAG and doesn't learn from your
+traffic. The server's `AVA_SYNTEC_API_KEY` bootstrap key also works.
+
+If you write `config.toml` by hand, the fields are `ava_url` and `ava_token`
+(not `api_key`). See [Configuration](#configuration).
 
 ## Run
 
@@ -120,6 +125,90 @@ capped by `max_iterations` (default 50, configurable). Tool prompts
 auto-approval `--yes` enables for the REPL). `--model NAME` overrides the model
 in both headless and REPL mode.
 
+For unattended runs (another program driving AvaDex), combine the flags below:
+
+```bash
+avadex --config run/avadex.toml --ignore-user-config --workdir run \
+       --allow-tools read_file,grep_files,mcp__syntec-forms \
+       --output-format json --model gemma4:26b --prompt "..."
+```
+
+#### Restricting tools: `--allow-tools`
+
+Headless mode approves every tool call, so the tool set **is** the security
+boundary. `--allow-tools LIST` names exactly which tools a run may use:
+
+| Entry | Grants |
+|-------|--------|
+| `read_file` | a tool, by exact name |
+| `mcp__<server>` | every tool of that MCP server (by its name in `.mcp.json` / config) |
+| `mcp__<server>__<tool>` | one MCP tool, by the name the server reports |
+| `<server>_<tool>` | the same MCP tool, by the name the model sees |
+
+- Tools outside the list are **not sent to the model** and are **refused at
+  dispatch**, so a hallucinated tool name can't get through. Each refusal is
+  printed to stderr and listed in the JSON output's `permission_denials`.
+- It **fails closed**: an entry that matches no available tool (a typo, or an
+  MCP server that failed to start) exits **2** before Ava is called.
+- `load_skill` is a tool too. List it if the run should use skills.
+- The system prompt tells the model which tools it has.
+- Without the flag every tool is available, as before. The flag also works in
+  the REPL.
+
+#### Machine-readable output: `--output-format json`
+
+With `--prompt`, prints one JSON object instead of the plain answer (shaped
+after Claude Code's result envelope):
+
+```json
+{"type": "result", "subtype": "success", "is_error": false,
+ "result": "<final answer>", "errors": [],
+ "requested_model": "gemma4:26b", "model": "gemma4:26b", "models_used": ["gemma4:26b"],
+ "usage": {"input_tokens": 3398, "output_tokens": 91}, "usage_complete": true,
+ "num_requests": 3, "duration_ms": 5120, "permission_denials": []}
+```
+
+- `usage` sums every Ava request in the run: tool round-trips, retries and
+  context compaction.
+- `usage_complete: false` means some response had no real token count
+  (older Ava, or a prompt Ollama served from cache). Treat that as unknown,
+  not zero.
+- **Compare `requested_model` with `model`.** Ava silently falls back to its
+  default when the requested model isn't installed. `model` is what ran.
+- A failed run still prints the envelope (`is_error: true`) and exits 1.
+  `--output-format json` without `--prompt` exits 2.
+
+#### Using only the caller's config: `--ignore-user-config`
+
+`--config PATH` replaces `~/.config/avadex/config.toml`, but two things from the
+invoking user's home still merge in: the global allowlist and the global
+skills. `--ignore-user-config` (requires `--config`) drops both, so a run uses
+only the given config file and the workdir.
+
+| Source | Default | With `--ignore-user-config` |
+|--------|---------|-----------------------------|
+| `config.toml` | `--config` replaces the default (never merged) | same |
+| `~/.config/avadex/allowlist.toml` | merged | ignored |
+| `~/.config/avadex/skills/` | merged (workdir wins on name clash) | ignored |
+| `<workdir>/.mcp.json` | replaces the config's `mcp_servers` | same |
+| `<workdir>/.env` | overlays the process env for MCP headers | same |
+| `<workdir>/.avadex/allowlist.toml` | merged when present or `--workdir` is set | same |
+
+Logs (`~/.local/state/avadex/`) and REPL history are still written to the home
+directory. They're output, not configuration.
+
+### Listing models
+
+```bash
+avadex models           # one per line: id, size, (default)
+avadex models --json    # {"models": [{"id": ..., "size": ...}], "default": ...}
+```
+
+Lists what Ava's `GET /api/v1/models` accepts. Tool support depends on the
+model: `ollama show <model>` on the Ava server lists a `tools` capability, and
+even then a model can emit tool calls as text (AvaDex reports that as an
+error). Test a model with a one-tool `--allow-tools` run before relying on it.
+
 ## Tools
 
 Built-in (always available):
@@ -142,7 +231,9 @@ Built-in (always available):
 | `todo_write`  | Replace the session todo list (for multi-step planning).         |
 | `todo_read`   | Read the current todo list.                                      |
 
-Plus any tools from MCP servers you've configured (namespaced as `<server>.<tool>`).
+Plus any tools from MCP servers you've configured. The model sees them as
+`<server>_<tool>`, with every character outside `[A-Za-z0-9_]` replaced by `_`
+(so `syntec-forms` + `get.form` becomes `syntec_forms_get_form`).
 
 ## Slash commands
 
@@ -273,6 +364,10 @@ A project allowlist is read from whatever directory you point AvaDex at, so
 treat a checked-in `.avadex/allowlist.toml` as executable content: read it
 before running AvaDex in a repository you don't control.
 
+Headless (`--prompt`) and `--yes` runs approve every tool call. When another
+program drives AvaDex unattended, restrict the run with `--allow-tools` and use
+`--ignore-user-config`, so the tool set is exactly what the caller granted.
+
 ## Known limitations
 
 - Ava's `/api/v1/messages` is non-streaming — each turn shows a "..."
@@ -281,9 +376,9 @@ before running AvaDex in a repository you don't control.
   long sessions with hybrid context management (dedup + proactive compaction,
   see CHANGELOG 0.3.0).
 - No standalone web-search / RAG *tools* — Ava doesn't expose those endpoints.
-  Auto-RAG fires server-side on every request (at web-chat parity), and the
-  system prompt steers the agent to answer domain questions from that injected
-  knowledge rather than searching local files.
+  Auto-RAG fires server-side on every request (at web-chat parity) unless the
+  API key is private, and the system prompt steers the agent to answer domain
+  questions from that injected knowledge rather than searching local files.
 - Linux only.
 
 ## Develop
@@ -296,7 +391,8 @@ pytest
 ```
 
 Run with `--debug` to also write verbose logs to `~/.local/state/avadex/debug.log`
-(rotating, 1 MB × 5 files):
+(rotating, 1 MB × 5 files). They go to that file, not to stderr. Each Ava
+request logs `tools=N`, which is a quick way to check an `--allow-tools` run:
 
 ```bash
 avadex --debug
