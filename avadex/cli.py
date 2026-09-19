@@ -5,6 +5,7 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
+from avadex.allow_tools import AllowToolsError, parse_allow_tools, resolve_allowed
 from avadex.config import save_token, load_config, ConfigMissing
 from avadex.mcp_workdir import resolve_mcp_servers
 from avadex.workdir import resolve_workdir, workdir_allowlist_path, WorkdirError
@@ -160,10 +161,17 @@ def _default_or_custom_prompt(cfg) -> str:
     )
 
 
-def _build_system_prompt(cfg, skill_index: str = "") -> str:
+def _build_system_prompt(cfg, skill_index: str = "", allowed: list[str] | None = None) -> str:
     base = _default_or_custom_prompt(cfg)
     if skill_index:
         base = base + "\n\n" + skill_index
+    if allowed is not None:
+        base = base + (
+            "\n\nTOOL RESTRICTION: in this run you can only use these tools: "
+            f"{', '.join(sorted(allowed))}. Any other tool mentioned above is "
+            "unavailable and will be refused — don't try it; work with what you "
+            "have or say what you couldn't do."
+        )
     return base
 
 
@@ -175,6 +183,7 @@ def run_repl(
     model: str | None = None,
     auto_approve: bool = False,
     workdir: Path | None = None,
+    allow_tools: str | None = None,
 ) -> int:
     # Sanity check the current working directory up front. If the shell is
     # sitting in a deleted/unreachable dir, every relative-path tool (bash,
@@ -239,6 +248,17 @@ def run_repl(
             log.warning("MCP server '%s' failed to start: %s", s.name, _describe_exc(exc))
     register_mcp_tools(mcp_clients, registry)
 
+    allowed: set[str] | None = None
+    if allow_tools is not None:
+        try:
+            allowed = resolve_allowed(parse_allow_tools(allow_tools), registry)
+        except AllowToolsError as exc:
+            print(str(exc), file=sys.stderr)
+            _stop_mcp(mcp_clients)
+            client.close()
+            return 2
+        registry.restrict(allowed)
+
     # A project allowlist is honored when it already exists, or when the user
     # explicitly chose this workdir (so the first /allow lands in the project).
     project_allowlist = workdir_allowlist_path(cwd)
@@ -249,7 +269,7 @@ def run_repl(
     initial_model = _resolve_initial_model(cfg, client)
     agent = AgentLoop(
         client=client, registry=registry, permissions=permissions,
-        system_prompt=_build_system_prompt(cfg, render_skill_index(skills)),
+        system_prompt=_build_system_prompt(cfg, render_skill_index(skills), allowed),
         max_context_tokens=cfg.max_context_tokens,
         max_response_tokens=cfg.max_response_tokens,
         model=model or initial_model,
@@ -269,6 +289,9 @@ def run_repl(
             # max_iterations) — MCP servers and built-in tools are all in play.
             renderer = HeadlessRenderer()
             agent.run_turn(prompt, renderer)
+            for name in registry.refused:
+                print(f"avadex: refused tool '{name}' (not in --allow-tools)",
+                      file=sys.stderr)
             sys.stdout.write(renderer.text)
             if renderer.text and not renderer.text.endswith("\n"):
                 sys.stdout.write("\n")
@@ -277,12 +300,16 @@ def run_repl(
         repl.run()
         return 0
     finally:
-        for mc in mcp_clients:
-            try:
-                mc.stop()
-            except Exception:
-                pass
+        _stop_mcp(mcp_clients)
         client.close()
+
+
+def _stop_mcp(mcp_clients) -> None:
+    for mc in mcp_clients:
+        try:
+            mc.stop()
+        except Exception:
+            pass
 
 
 def set_key_command(
@@ -349,6 +376,16 @@ def main(argv: list[str] | None = None) -> int:
              "Overrides 'workdir' in config.toml; defaults to the current "
              "directory.",
     )
+    parser.add_argument(
+        "--allow-tools",
+        default=None,
+        metavar="LIST",
+        help="Comma-separated tools this run may use; every other tool is "
+             "hidden from the model and refused if called. Entries: a tool "
+             "name (read_file), mcp__<server> (all tools of an MCP server) or "
+             "mcp__<server>__<tool>. An entry that matches no available tool "
+             "exits 2. Omit to allow every tool.",
+    )
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("set-key")
     sub.add_parser("login")   # legacy alias → redirect
@@ -362,7 +399,8 @@ def main(argv: list[str] | None = None) -> int:
         return login_redirect_command()
     # Default: REPL (or headless agent if --prompt is given).
     return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
-                    auto_approve=args.yes, workdir=args.workdir)
+                    auto_approve=args.yes, workdir=args.workdir,
+                    allow_tools=args.allow_tools)
 
 
 if __name__ == "__main__":

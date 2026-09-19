@@ -37,6 +37,7 @@ class ToolRegistry:
         # None = unrestricted. Otherwise only these names are exposed to the
         # model and dispatchable (see avadex.allow_tools / --allow-tools).
         self._allowed: frozenset[str] | None = None
+        self.refused: list[str] = []   # names refused by the restriction, in order
 
     def register(self, tool: ToolDefinition):
         self._tools[tool.name] = tool
@@ -71,6 +72,7 @@ class ToolRegistry:
         if tool is None:
             return ToolResult(content=f"unknown tool: {name}", is_error=True)
         if not self._permitted(name):
+            self.refused.append(name)
             return ToolResult(
                 content=f"tool '{name}' is not permitted in this run (--allow-tools)",
                 is_error=True,
