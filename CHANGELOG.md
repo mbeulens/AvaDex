@@ -3,6 +3,32 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-09-21
+
+Minor release: a headless run keeps its task, or says so. 1.2.0 stopped
+context trimming from dropping the task; this finishes the job for the case
+where it was already gone, restoring it instead of sending a request Ava
+refuses, and records what happened. Collects 1.2.1 – 1.2.2.
+
+### Fixed
+- **A request could still go out with no user text (1.2.1).** 1.2.0's anchor
+  guard was a silent no-op when the anchor was already missing:
+  `_anchor_index` returns `None`, and `None not in {…}` is always true, so
+  pruning proceeded unprotected. Ava then rejected the request with a 400 and
+  the unattended run died. `prune`/`drop_oldest` now test for `None`
+  explicitly, and — since neither can invent a user message — `AgentLoop`
+  re-anchors: if the conversation has no user text before a request (including
+  the context-overflow retry), the task is put back, with a warning to the
+  user and the message shape (roles and block types, no content) in the debug
+  log. How the task went missing is still unknown: simulated runs with
+  Conductor's settings, large and errored MCP results, compaction and pruning
+  all keep it. Reported by Syntec Conductor with a verified repro.
+- With `--debug`, the re-anchor warning is followed by the **full
+  conversation** in the debug log (image payloads excluded), so a recurrence
+  can be diagnosed from one run. Without `--debug` only roles and block types
+  are recorded. README now warns that `--debug` can write conversation content
+  to disk. (1.2.2)
+
 ## [1.2.0] — 2026-09-20
 
 Minor release: two failures that unattended runs could not see. A long run

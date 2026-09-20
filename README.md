@@ -9,7 +9,9 @@ The flags added in 1.1 (`--allow-tools`, `--output-format`,
 of the `--output-format json` envelope are covered too. Since 1.2, a run that
 can't proceed honestly fails rather than finishing quietly: a model that
 writes a tool call out as text instead of calling it exits 1, and context
-trimming always keeps the task.
+trimming always keeps the task. Since 1.3, if the task is ever missing
+anyway, AvaDex restores it, tells you, and records the conversation under
+`--debug`.
 
 ## Install
 
@@ -453,7 +455,10 @@ pytest
 ```
 
 Run with `--debug` to also write verbose logs to `~/.local/state/avadex/debug.log`
-(rotating, 1 MB × 5 files). They go to that file, not to stderr. Each Ava
+(rotating, 1 MB × 5 files). They go to that file, not to stderr. **`--debug`
+may write conversation content to that file** — tool output and whatever the
+model was sent — so treat it as sensitive and leave it off for customer data
+you don't want on disk. Without it, only shapes and counts are logged. Each Ava
 request logs `tools=N`, which is a quick way to check an `--allow-tools` run:
 
 ```bash

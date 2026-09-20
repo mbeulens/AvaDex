@@ -266,6 +266,8 @@ def _drop_oldest_while(messages: list[dict], keep_going) -> list[dict]:
             group |= pair_index.get(tid, set())
         return group
 
+    # None: no user text to protect. Nothing here can create one, so dropping
+    # proceeds; AgentLoop re-anchors before the request goes out.
     anchor = _anchor_index(messages)
     kept = list(range(len(messages)))
     total = sum(estimate_tokens(messages[i]) for i in kept)
@@ -277,7 +279,7 @@ def _drop_oldest_while(messages: list[dict], keep_going) -> list[dict]:
         group = None
         for i in kept:
             g = group_of(i)
-            if anchor not in g and max(kept) not in g:
+            if (anchor is None or anchor not in g) and max(kept) not in g:
                 group = g
                 break
         if group is None:
