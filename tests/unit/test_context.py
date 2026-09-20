@@ -487,3 +487,26 @@ def test_prune_still_pairs_tool_use_and_result_after_the_anchor():
     ids_res = {b["tool_use_id"] for m in out if isinstance(m["content"], list)
                for b in m["content"] if b.get("type") == "tool_result"}
     assert ids_used == ids_res
+
+
+def test_prune_without_any_user_text_keeps_the_newest_only():
+    # Reported by Conductor against 1.2.0: with no anchor, `anchor not in group`
+    # was always true, so the guard silently did nothing. Pruning is still
+    # allowed here — there's no anchor to save — but it must not crash, and the
+    # caller (AgentLoop) re-anchors before the request goes out.
+    msgs = []
+    for i in range(3):
+        msgs += _tool_step(i, 4000)
+    out = prune(msgs, 500)
+    assert out[-1] == msgs[-1]
+    assert not _has_user_text(out)
+
+
+def test_drop_oldest_without_an_anchor_does_not_crash():
+    from avadex.context import drop_oldest
+    msgs = []
+    for i in range(3):
+        msgs += _tool_step(i, 4000)
+    out = drop_oldest(msgs, 2)
+    assert out[-1] == msgs[-1]
+    assert len(out) < len(msgs)

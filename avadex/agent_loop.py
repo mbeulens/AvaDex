@@ -8,8 +8,9 @@ from avadex.types import (
 )
 from avadex.tools.registry import ToolRegistry, ToolResult
 from avadex.permissions import PermissionManager
-from avadex.context import drop_oldest, fit_context, prune
+from avadex.context import _anchor_index, drop_oldest, fit_context, prune
 from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
+from avadex.log import get_logger
 from avadex.renderer import Renderer
 from avadex.spinner import Spinner
 from avadex.usage import UsageTotals
@@ -30,6 +31,19 @@ COMPACTION_INSTRUCTION = (
     "Summarize the conversation above per your instructions, preserving goals, "
     "key facts/data, decisions, and pending next steps."
 )
+
+
+log = get_logger(__name__)
+
+
+def _block_types(message: dict) -> list[str] | str:
+    """Block types of a message, for a diagnostic log line (no content)."""
+    c = message.get("content")
+    if isinstance(c, str):
+        return "text" if c.strip() else "empty"
+    if isinstance(c, list):
+        return [b.get("type", "?") if isinstance(b, dict) else type(b).__name__ for b in c]
+    return type(c).__name__
 
 
 _FENCE_RE = re.compile(r"```.*?```", re.S)
@@ -119,9 +133,11 @@ class AgentLoop:
         self.policy = PolicyTracker()
         self.require_private = require_private
         self.prompt_user = prompt_user or (lambda tool, args: ("deny", None))
+        self._task_text = ""   # current request, for re-anchoring
 
     def clear(self):
         self.messages = []
+        self._task_text = ""
 
     def _request(self, **kwargs) -> AvaResponse:
         """One Ava round-trip, with its token usage and key policy recorded.
@@ -170,7 +186,24 @@ class AgentLoop:
     def _serialize_response_content(self, content: list) -> list[dict]:
         return [block_to_dict(b) for b in content]
 
+    def _ensure_anchor(self, messages: list[dict], renderer: Renderer) -> list[dict]:
+        """Put the task back if the conversation has no user text message.
+
+        Ava rejects such a request outright (qwen3.8: "requires at least one
+        user message with text"), and any model would have lost the task.
+        Context management is supposed to keep it, so reaching here is a bug:
+        say so, restore the task and carry on rather than failing the run."""
+        if _anchor_index(messages) is not None or not self._task_text:
+            return messages
+        shape = [(m.get("role"), _block_types(m)) for m in messages]
+        log.warning("no user text in %d messages, re-anchoring with the task: %s",
+                    len(messages), shape)
+        renderer.info("context management lost the task message — restoring it "
+                      "(please report; run with --debug for the message dump)")
+        return [{"role": "user", "content": self._task_text}] + messages
+
     def run_turn(self, user_text: str, renderer: Renderer) -> None:
+        self._task_text = user_text
         self.messages.append({"role": "user", "content": user_text})
         recent_signatures: list[str] = []
 
@@ -180,6 +213,7 @@ class AgentLoop:
             except KeyNotPrivate as exc:
                 renderer.error(str(exc))
                 return
+            self.messages = self._ensure_anchor(self.messages, renderer)
             try:
                 try:
                     response: AvaResponse = self._request(
@@ -192,7 +226,8 @@ class AgentLoop:
                 except ContextOverflow:
                     # Drop two oldest pairs (4 messages) and retry once, keeping
                     # the task and tool_use/tool_result pairs intact.
-                    self.messages = drop_oldest(self.messages, 4)
+                    self.messages = self._ensure_anchor(
+                        drop_oldest(self.messages, 4), renderer)
                     try:
                         response = self._request(
                             system=self.system_prompt,
