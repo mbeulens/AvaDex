@@ -3,7 +3,12 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.1.1 – 1.1.3)
+## [1.2.0] — 2026-09-20
+
+Minor release: two failures that unattended runs could not see. A long run
+kept its task through context trimming, and a model that writes a tool call
+out as text now fails the run instead of finishing it having done nothing.
+Both came out of Syntec Conductor's production runs. Collects 1.1.1 – 1.1.3.
 
 ### Fixed
 - **Long runs no longer lose their task after compaction (1.1.1).** When the

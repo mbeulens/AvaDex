@@ -6,7 +6,10 @@ Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
 and tool set are settled, and changes to them follow semantic versioning.
 The flags added in 1.1 (`--allow-tools`, `--output-format`,
 `--ignore-user-config`, `--require-private`, `avadex models`) and the fields
-of the `--output-format json` envelope are covered too.
+of the `--output-format json` envelope are covered too. Since 1.2, a run that
+can't proceed honestly fails rather than finishing quietly: a model that
+writes a tool call out as text instead of calling it exits 1, and context
+trimming always keeps the task.
 
 ## Install
 
