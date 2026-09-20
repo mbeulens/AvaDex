@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.2.1)
+## [Unreleased] — on `dev` (1.2.1 – 1.2.2)
 
 ### Fixed
 - **A request could still go out with no user text (1.2.1).** 1.2.0's anchor
@@ -18,6 +18,11 @@ All notable changes to AvaDex are recorded here. The project follows
   log. How the task went missing is still unknown: simulated runs with
   Conductor's settings, large and errored MCP results, compaction and pruning
   all keep it. Reported by Syntec Conductor with a verified repro.
+- With `--debug`, the re-anchor warning is followed by the **full
+  conversation** in the debug log (image payloads excluded), so a recurrence
+  can be diagnosed from one run. Without `--debug` only roles and block types
+  are recorded. README now warns that `--debug` can write conversation content
+  to disk. (1.2.2)
 
 ## [1.2.0] — 2026-09-20
 

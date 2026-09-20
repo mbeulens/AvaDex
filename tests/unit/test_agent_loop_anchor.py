@@ -4,6 +4,9 @@ Conductor hit an Ava 400 ("requires at least one user message with text") on a
 long run at 1.2.0: something upstream had left the conversation with tool
 results only. Whatever the cause, the agent loop must not send such a request.
 """
+import contextlib
+import logging
+
 from avadex.agent_loop import AgentLoop
 from avadex.context import _has_text
 from avadex.permissions import PermissionManager, Rule
@@ -68,3 +71,65 @@ def test_normal_runs_are_untouched(tmp_path):
     renderer = RecordingRenderer()
     loop.run_turn("hello", renderer)
     assert client.sent[0] == [{"role": "user", "content": "hello"}]
+
+
+class _Capture(logging.Handler):
+    """The avadex logger tree doesn't propagate to root, so capture directly."""
+    def __init__(self, level):
+        super().__init__(level)
+        self.records = []
+    def emit(self, record):
+        self.records.append(record)
+    def text(self, level=None):
+        return "\n".join(r.getMessage() for r in self.records
+                          if level is None or r.levelno == level)
+
+
+@contextlib.contextmanager
+def capture_at(level):
+    logger = logging.getLogger("avadex")
+    handler = _Capture(level)
+    old = logger.level
+    logger.setLevel(level)
+    logger.addHandler(handler)
+    try:
+        yield handler
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(old)
+
+
+def _loop_losing_the_task(tmp_path, monkeypatch, content):
+    client = Recorder()
+    loop = _loop(tmp_path, client)
+    monkeypatch.setattr(loop, "_fit", lambda: [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t0", "content": content}]},
+    ])
+    return loop
+
+
+def test_debug_log_carries_the_full_messages(tmp_path, monkeypatch):
+    # With --debug the dump may hold real content: it goes to the user's own
+    # debug.log, and without it there is nothing to diagnose.
+    loop = _loop_losing_the_task(tmp_path, monkeypatch, "SECRET-PAYLOAD")
+    with capture_at(logging.DEBUG) as cap:
+        loop.run_turn("the task", RecordingRenderer())
+    assert "SECRET-PAYLOAD" in cap.text(logging.DEBUG)
+
+
+def test_without_debug_no_content_is_logged(tmp_path, monkeypatch):
+    loop = _loop_losing_the_task(tmp_path, monkeypatch, "SECRET-PAYLOAD")
+    with capture_at(logging.WARNING) as cap:
+        loop.run_turn("the task", RecordingRenderer())
+    assert "SECRET-PAYLOAD" not in cap.text()
+    assert "re-anchoring" in cap.text()      # the shape line still appears
+
+
+def test_image_payloads_are_not_dumped(tmp_path, monkeypatch):
+    loop = _loop_losing_the_task(tmp_path, monkeypatch, [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                     "data": "BASE64IMAGEDATA"}}])
+    with capture_at(logging.DEBUG) as cap:
+        loop.run_turn("the task", RecordingRenderer())
+    assert "BASE64IMAGEDATA" not in cap.text()

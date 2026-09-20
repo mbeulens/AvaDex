@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 import re
 
 from avadex.types import (
@@ -8,7 +10,8 @@ from avadex.types import (
 )
 from avadex.tools.registry import ToolRegistry, ToolResult
 from avadex.permissions import PermissionManager
-from avadex.context import _anchor_index, drop_oldest, fit_context, prune
+from avadex.context import (_anchor_index, _strip_image_payloads, drop_oldest,
+                            fit_context, prune)
 from avadex.ava_client import ContextOverflow, AvaError, TokenExpired
 from avadex.log import get_logger
 from avadex.renderer import Renderer
@@ -198,6 +201,13 @@ class AgentLoop:
         shape = [(m.get("role"), _block_types(m)) for m in messages]
         log.warning("no user text in %d messages, re-anchoring with the task: %s",
                     len(messages), shape)
+        if log.isEnabledFor(logging.DEBUG):
+            # --debug only, and --debug writes to the user's own machine:
+            # the full conversation, minus image payloads, is what makes this
+            # diagnosable. Without --debug only the shape above is recorded.
+            stripped, _ = _strip_image_payloads(messages)
+            log.debug("re-anchor: full messages %s",
+                      json.dumps(stripped, ensure_ascii=False, default=str))
         renderer.info("context management lost the task message — restoring it "
                       "(please report; run with --debug for the message dump)")
         return [{"role": "user", "content": self._task_text}] + messages
