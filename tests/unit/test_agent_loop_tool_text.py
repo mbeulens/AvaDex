@@ -92,3 +92,43 @@ def test_run_turn_no_warning_on_normal_text(tmp_path):
     loop.run_turn("hi", renderer)
 
     assert [e for e in renderer.events if e[0] == "error"] == []
+
+
+# Qwen-style XML-ish calls. Conductor saw a specialist emit one of these as
+# prose: nothing ran, the run exited 0, and the next step was built on work
+# that had never happened.
+
+def test_detects_xml_function_block():
+    text = ("I'll look that up.\n"
+            "<function=syntec_forms_form_list>\n"
+            "<parameter=search> zz_product_group </parameter>\n"
+            "</function>")
+    assert _unexecuted_tool_call_name(text, {"syntec_forms_form_list"}) == "syntec_forms_form_list"
+
+
+def test_detects_tool_call_tag_with_json():
+    text = '<tool_call>\n{"name": "write_file", "arguments": {"path": "x"}}\n</tool_call>'
+    assert _unexecuted_tool_call_name(text, {"write_file"}) == "write_file"
+
+
+def test_detects_function_call_tag_with_name_attribute():
+    text = '<function_call name="read_file">{"path": "x"}</function_call>'
+    assert _unexecuted_tool_call_name(text, {"read_file"}) == "read_file"
+
+
+def test_xml_block_for_an_unknown_tool_is_ignored():
+    text = "<function=frobnicate>\n<parameter=x> 1 </parameter>\n</function>"
+    assert _unexecuted_tool_call_name(text, {"write_file"}) is None
+
+
+def test_fenced_example_of_an_xml_call_is_not_flagged():
+    # Explaining the syntax in a code fence is not an unexecuted call.
+    text = ("To call it you would write:\n"
+            "```\n<function=write_file>\n<parameter=path> x </parameter>\n</function>\n```\n"
+            "but I used the tool directly instead.")
+    assert _unexecuted_tool_call_name(text, {"write_file"}) is None
+
+
+def test_prose_mentioning_a_tool_name_is_not_flagged():
+    text = "I called syntec_forms_form_list and it returned 195 forms."
+    assert _unexecuted_tool_call_name(text, {"syntec_forms_form_list"}) is None

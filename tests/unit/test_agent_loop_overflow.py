@@ -86,3 +86,63 @@ def test_token_expired_renders_login_prompt(tmp_path):
     renderer = RecordingRenderer()
     loop.run_turn("hi", renderer)
     assert any(e[0] == "error" and "login" in e[1].lower() for e in renderer.events)
+
+
+def test_overflow_retry_keeps_the_task_and_tool_pairs(tmp_path):
+    # An agent run: the task, then tool steps. The retry after an overflow must
+    # keep the task (the only user text) and never split a tool_use from its
+    # tool_result, or the retried request is invalid.
+    client = FlakyClient()
+    seen = []
+    orig = client.messages
+    def record(system, messages, tools, max_tokens=2048, model="gemma4"):
+        seen.append([dict(m) for m in messages])
+        return orig(system, messages, tools, max_tokens, model)
+    client.messages = record
+    loop = AgentLoop(
+        client=client, registry=ToolRegistry(),
+        permissions=PermissionManager(tmp_path / "allow.toml"),
+        system_prompt="", max_context_tokens=100000,
+    )
+    steps = []
+    for i in range(3):
+        steps += [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": f"t{i}", "name": "x", "input": {}}]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": f"t{i}", "content": "r"}]},
+        ]
+    loop.messages = [{"role": "user", "content": "the task"}] + steps
+    # run_turn appends its own user text; drive the retry from a tool step instead
+    loop.messages.append({"role": "assistant", "content": [
+        {"type": "tool_use", "id": "t9", "name": "x", "input": {}}]})
+    loop.messages.append({"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "t9", "content": "r"}]})
+    renderer = RecordingRenderer()
+    loop.run_turn("continue", renderer)
+    retried = seen[1]
+    assert len(retried) < len(seen[0])
+    assert any(m["role"] == "user" and m["content"] == "continue" for m in retried)
+    uses = {b["id"] for m in retried if isinstance(m["content"], list)
+            for b in m["content"] if b.get("type") == "tool_use"}
+    results = {b["tool_use_id"] for m in retried if isinstance(m["content"], list)
+               for b in m["content"] if b.get("type") == "tool_result"}
+    assert uses == results
+
+
+def test_overflow_retry_in_a_tool_loop_keeps_the_task(tmp_path):
+    # Mid-run the newest message is a tool_result, and the task is the first
+    # message. Dropping the first four messages would drop the task.
+    from avadex.context import drop_oldest
+    msgs = [{"role": "user", "content": "the task"}]
+    for i in range(3):
+        msgs += [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": f"t{i}", "name": "x", "input": {}}]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": f"t{i}", "content": "r"}]},
+        ]
+    out = drop_oldest(msgs, 4)
+    assert out[0] == {"role": "user", "content": "the task"}
+    assert out[-1] == msgs[-1]
+    assert len(out) == 3   # task + the last tool pair; two pairs dropped

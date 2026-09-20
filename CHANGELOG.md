@@ -3,6 +3,41 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-09-20
+
+Minor release: two failures that unattended runs could not see. A long run
+kept its task through context trimming, and a model that writes a tool call
+out as text now fails the run instead of finishing it having done nothing.
+Both came out of Syntec Conductor's production runs. Collects 1.1.1 – 1.1.3.
+
+### Fixed
+- **Long runs no longer lose their task after compaction (1.1.1).** When the
+  recent tool results alone exceeded the context budget, compaction was
+  followed by pruning, and pruning dropped the oldest message first: the
+  compaction summary, which was the only user text left. The next request was
+  just tool calls and tool results. Models served with Ollama's `qwen3.8`
+  renderer reject that with a 500 "no user query found in messages", and any
+  model would have lost its task. Pruning now always keeps the most recent
+  user message with text (the task or the summary). The retry after Ava
+  reports a context overflow used `messages[4:]`, which could drop the task
+  and split a tool call from its result. It now uses the same rules
+  (`drop_oldest`). Found by Syntec Conductor; diagnosed on the host by
+  ava-deploy.
+
+- **A tool call written as markup is caught too (1.1.3).** AvaDex flagged a
+  model that emitted a tool call as JSON text, but not Qwen's
+  `<function=name>…</function>` form, or `<tool_call>` / `<function_call>`
+  wrappers. Such a run ended `end_turn` with exit 0, so a caller read it as a
+  completed step although nothing ran. These now raise the same error and exit
+  1. Markup inside a code fence is ignored, so explaining the syntax is still
+  fine. Reported by Syntec Conductor, which saw a specialist "call"
+  `syntec_forms_form_list` in prose and build the next step on work that never
+  happened.
+
+### Docs (1.1.2)
+- README "Known limitations" explains that trimming keeps the task, and
+  why losing it was worse than the error qwen3.8 raised.
+
 ## [1.1.0] — 2026-09-19
 
 Minor release: AvaDex as an unattended runtime. Built for Syntec Conductor,

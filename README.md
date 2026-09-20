@@ -6,7 +6,10 @@ Stable since 1.0.0: the CLI flags, `config.toml` keys, allowlist format
 and tool set are settled, and changes to them follow semantic versioning.
 The flags added in 1.1 (`--allow-tools`, `--output-format`,
 `--ignore-user-config`, `--require-private`, `avadex models`) and the fields
-of the `--output-format json` envelope are covered too.
+of the `--output-format json` envelope are covered too. Since 1.2, a run that
+can't proceed honestly fails rather than finishing quietly: a model that
+writes a tool call out as text instead of calling it exits 1, and context
+trimming always keeps the task.
 
 ## Install
 
@@ -429,7 +432,11 @@ program drives AvaDex unattended, restrict the run with `--allow-tools` and use
   spinner until the response arrives.
 - Ava's agent API runs at a 32768-token context (`num_ctx`); AvaDex manages
   long sessions with hybrid context management (dedup + proactive compaction,
-  see CHANGELOG 0.3.0).
+  see CHANGELOG 0.3.0). When it trims the conversation it always keeps the
+  task, or the summary that replaced it. Before 1.1.1, a run whose recent tool
+  output alone was over budget lost it. Every model then carried on without
+  its task, and could produce confidently wrong work. qwen3.8 was just the one
+  that refused with an error ("no user query found in messages").
 - No standalone web-search / RAG *tools* — Ava doesn't expose those endpoints.
   Auto-RAG fires server-side on every request (at web-chat parity) unless the
   API key is private, and the system prompt steers the agent to answer domain

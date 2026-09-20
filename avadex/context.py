@@ -228,13 +228,28 @@ def _tool_result_ids(message: dict) -> set[str]:
     }
 
 
-def prune(messages: list[dict], max_tokens: int) -> list[dict]:
-    """Drop oldest messages until total token estimate fits the budget.
+def _has_text(message: dict) -> bool:
+    c = message.get("content")
+    if isinstance(c, str):
+        return bool(c.strip())
+    return isinstance(c, list) and any(
+        isinstance(b, dict) and b.get("type") == "text" for b in c)
 
-    Invariants:
-      - Always keeps the most recent message, even if it alone exceeds budget.
-      - tool_use and matching tool_result messages are dropped together.
-    """
+
+def _anchor_index(messages: list[dict]) -> int | None:
+    """The most recent user message with text: the current request, or the
+    compaction summary. Tool results don't count."""
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user" and _has_text(messages[i]):
+            return i
+    return None
+
+
+def _drop_oldest_while(messages: list[dict], keep_going) -> list[dict]:
+    """Drop the oldest droppable messages while keep_going(dropped, total).
+
+    Never drops the most recent message or the anchor (see _anchor_index),
+    and drops a tool_use together with its tool_result."""
     if not messages:
         return messages
 
@@ -245,22 +260,53 @@ def prune(messages: list[dict], max_tokens: int) -> list[dict]:
             if tid:
                 pair_index.setdefault(tid, set()).add(i)
 
+    def group_of(i: int) -> set[int]:
+        group = {i}
+        for tid in _tool_use_ids(messages[i]) | _tool_result_ids(messages[i]):
+            group |= pair_index.get(tid, set())
+        return group
+
+    anchor = _anchor_index(messages)
     kept = list(range(len(messages)))
     total = sum(estimate_tokens(messages[i]) for i in kept)
+    dropped = 0
 
-    while total > max_tokens and len(kept) > 1:
-        # Find the oldest index, expand to its full tool pair group
-        oldest = kept[0]
-        group = {oldest}
-        for tid in _tool_use_ids(messages[oldest]) | _tool_result_ids(messages[oldest]):
-            if tid in pair_index:
-                group |= pair_index[tid]
-        # Don't drop the most recent message
-        if max(kept) in group:
+    while keep_going(dropped, total) and len(kept) > 1:
+        # Oldest droppable message, expanded to its full tool pair group;
+        # a group holding the anchor or the most recent message isn't droppable.
+        group = None
+        for i in kept:
+            g = group_of(i)
+            if anchor not in g and max(kept) not in g:
+                group = g
+                break
+        if group is None:
             break
         for idx in group:
             if idx in kept:
                 kept.remove(idx)
                 total -= estimate_tokens(messages[idx])
+                dropped += 1
 
     return [messages[i] for i in sorted(kept)]
+
+
+def prune(messages: list[dict], max_tokens: int) -> list[dict]:
+    """Drop oldest messages until total token estimate fits the budget.
+
+    Invariants:
+      - Always keeps the most recent message, even if it alone exceeds budget.
+      - Always keeps the anchor: the most recent user message with text (the
+        task, or the compaction summary). Without it the model loses its task,
+        and some models reject the request outright (Ollama's qwen3.8 renderer:
+        "no user query found in messages").
+      - tool_use and matching tool_result messages are dropped together.
+    """
+    return _drop_oldest_while(messages, lambda dropped, total: total > max_tokens)
+
+
+def drop_oldest(messages: list[dict], n: int) -> list[dict]:
+    """Drop at least `n` of the oldest messages, with prune's invariants.
+
+    Used when Ava reports a context overflow the estimate didn't foresee."""
+    return _drop_oldest_while(messages, lambda dropped, total: dropped < n)
