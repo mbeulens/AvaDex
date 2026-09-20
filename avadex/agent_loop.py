@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from avadex.types import (
     TextBlock, ToolUseBlock, AvaResponse,
     block_to_dict, iter_tool_use_blocks,
@@ -30,15 +32,40 @@ COMPACTION_INSTRUCTION = (
 )
 
 
+_FENCE_RE = re.compile(r"```.*?```", re.S)
+# Tool calls models write as prose instead of calling: Qwen's
+# <function=NAME>...</function>, and <tool_call>/<function_call> wrappers.
+_XML_CALL_RES = (
+    re.compile(r"<\s*(?:function|tool_call|function_call|invoke)\s*=\s*[\"\']?([\w.-]+)"),
+    re.compile(r"<\s*(?:function|tool_call|function_call|invoke)\b[^>]*\bname\s*=\s*[\"\']([\w.-]+)"),
+    re.compile(r"<\s*(?:tool_call|function_call)\s*>\s*\{.*?[\"\']name[\"\']\s*:\s*[\"\']([\w.-]+)", re.S),
+)
+
+
+def _xml_tool_call_name(text: str, tool_names) -> "str | None":
+    """A tool call written out as markup rather than called. Fenced code is
+    ignored so explaining the syntax isn't mistaken for an unexecuted call."""
+    outside_fences = _FENCE_RE.sub(" ", text)
+    for pattern in _XML_CALL_RES:
+        for name in pattern.findall(outside_fences):
+            if name in set(tool_names):
+                return name
+    return None
+
+
 def _unexecuted_tool_call_name(text: str, tool_names) -> "str | None":
-    """If `text` is just a tool-call-shaped JSON object naming a known tool,
+    """If `text` holds a tool call the model wrote out instead of calling,
     return that tool name; otherwise None.
 
-    Detects models that can't do native tool-calling and instead emit the call
-    as plain text (e.g. `{"name": "write_file", "arguments": {...}}`), which
-    never executes. Conservative: only fires when the text IS the JSON object,
-    so it won't nag on normal answers."""
+    Detects models that can't do native tool-calling and emit the call as
+    text — `{"name": "write_file", "arguments": {...}}`, or Qwen's
+    `<function=write_file>` markup — which never executes. Conservative: the
+    JSON form only fires when the text IS the object, and markup inside a code
+    fence is ignored, so it won't nag on normal answers."""
     import json
+    xml = _xml_tool_call_name(text, tool_names)
+    if xml is not None:
+        return xml
     s = text.strip()
     if s.startswith("```"):
         s = s.strip("`").strip()

@@ -3,7 +3,7 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.1.1 – 1.1.2)
+## [Unreleased] — on `dev` (1.1.1 – 1.1.3)
 
 ### Fixed
 - **Long runs no longer lose their task after compaction (1.1.1).** When the
@@ -18,6 +18,16 @@ All notable changes to AvaDex are recorded here. The project follows
   and split a tool call from its result. It now uses the same rules
   (`drop_oldest`). Found by Syntec Conductor; diagnosed on the host by
   ava-deploy.
+
+- **A tool call written as markup is caught too (1.1.3).** AvaDex flagged a
+  model that emitted a tool call as JSON text, but not Qwen's
+  `<function=name>…</function>` form, or `<tool_call>` / `<function_call>`
+  wrappers. Such a run ended `end_turn` with exit 0, so a caller read it as a
+  completed step although nothing ran. These now raise the same error and exit
+  1. Markup inside a code fence is ignored, so explaining the syntax is still
+  fine. Reported by Syntec Conductor, which saw a specialist "call"
+  `syntec_forms_form_list` in prose and build the next step on work that never
+  happened.
 
 ### Docs (1.1.2)
 - README "Known limitations" explains that trimming keeps the task, and
