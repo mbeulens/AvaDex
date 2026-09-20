@@ -3,7 +3,12 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — on `dev` (1.2.1 – 1.2.2)
+## [1.3.0] — 2026-09-21
+
+Minor release: a headless run keeps its task, or says so. 1.2.0 stopped
+context trimming from dropping the task; this finishes the job for the case
+where it was already gone, restoring it instead of sending a request Ava
+refuses, and records what happened. Collects 1.2.1 – 1.2.2.
 
 ### Fixed
 - **A request could still go out with no user text (1.2.1).** 1.2.0's anchor
