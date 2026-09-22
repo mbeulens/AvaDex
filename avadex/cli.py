@@ -531,6 +531,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.output_format == "json" and args.prompt is None:
         print("--output-format json requires --prompt", file=sys.stderr)
         return 2
+    if args.prompt is not None and not args.prompt.strip():
+        # The task message is also the anchor every request carries. An empty
+        # one is not one: context management may drop it, and the run would
+        # then die on an Ava 400 rather than here, with a reason.
+        print("--prompt is empty — a headless run needs a task", file=sys.stderr)
+        return 2
     # Default: REPL (or headless agent if --prompt is given).
     return run_repl(config_path=args.config, prompt=args.prompt, model=args.model,
                     auto_approve=args.yes, workdir=args.workdir,

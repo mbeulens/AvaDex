@@ -3,6 +3,15 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] — 2026-09-22
+
+### Fixed
+- **An empty `--prompt` is refused instead of started.** A headless run with no
+  task cannot state what it is doing, and the task message is also the anchor
+  every request carries: an empty one is not one, so context management is free
+  to drop it and the run dies later on an Ava 400 rather than immediately, with
+  a reason. `--prompt ""` (and whitespace-only) now exits 2 and says so.
+
 ## [1.4.1] — 2026-09-22
 
 ### Fixed

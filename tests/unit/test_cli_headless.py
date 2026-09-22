@@ -1,3 +1,4 @@
+import avadex.cli as cli
 from avadex.cli import _auto_approve_prompter, _select_prompter
 
 
@@ -24,3 +25,28 @@ def test_plain_repl_uses_interactive_prompter():
     prompter = _select_prompter(None, False)
     assert prompter is not _auto_approve_prompter
     assert callable(prompter)
+
+
+def test_an_empty_prompt_is_refused(monkeypatch, capsys):
+    """A run with no task cannot state what it is doing.
+
+    The task message is also the anchor every request needs; an empty one is
+    not one, so context management is free to drop it and the run dies later
+    with an Ava 400 instead of here, immediately, with a reason.
+    """
+    monkeypatch.setattr(cli, "run_repl", lambda **kw: 0)
+    assert cli.main(["--prompt", ""]) == 2
+    assert "empty" in capsys.readouterr().err.lower()
+
+
+def test_a_whitespace_only_prompt_is_refused(monkeypatch):
+    # Whitespace is no more of an anchor than "" — _has_text strips first.
+    monkeypatch.setattr(cli, "run_repl", lambda **kw: 0)
+    assert cli.main(["--prompt", "   \n"]) == 2
+
+
+def test_a_real_prompt_still_runs(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli, "run_repl", lambda **kw: seen.update(kw) or 0)
+    assert cli.main(["--prompt", "build the form set"]) == 0
+    assert seen["prompt"] == "build the form set"
