@@ -3,6 +3,79 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — 2026-09-22
+
+Minor release: a taskless run is refused, reported, or legible. 1.4.0 made a
+run restore its task; this closes the one route through that guard which said
+nothing, stops a run with no task from starting, and puts the shape of every
+request in the debug trail so the next rejected request is diagnosable without
+anyone reconstructing it afterwards. Collects 1.4.1 – 1.4.3.
+
+### Added
+- **Every request records its shape under `--debug` (1.4.3).** Roles and block
+  types per request, plus the task length at the start of a turn. No content,
+  so it is safe on every request rather than only on the ones the anchor guard
+  complains about. Two of Conductor's 400s left nothing to diagnose because the
+  shape line was written only when the guard re-anchored; when the guard stays
+  quiet and Ava rejects the request anyway, the trail is now already there.
+
+### Fixed
+- **The anchor guard had one silent branch (1.4.1).** `_ensure_anchor` returned
+  before its warning whenever `_task_text` was empty, so a request that left
+  with no user text at all was never reported: no log line, no message to the
+  user, nothing in the `--debug` dump. Nothing can be restored without a task,
+  but it is now logged, dumped and reported like every other route through the
+  guard.
+- **An empty `--prompt` is refused instead of started (1.4.2).** A headless run
+  with no task cannot state what it is doing, and the task message is also the
+  anchor every request carries: an empty one is not one, so context management
+  is free to drop it and the run would die later on an Ava 400 rather than
+  immediately, with a reason. `--prompt ""` and whitespace-only now exit 2.
+
+### Notes
+The 400 that prompted all three remains unexplained and is not reproducing: one
+real occurrence on 1.4.0 (`syntec-conductor`, 2026-09-21 21:31:53 UTC, SDEV-5
+step 5), two earlier on 1.2.0 at the same step, then roughly 12 million tokens
+of Conductor benchmark traffic with nothing. Probes against the live endpoint
+ruled out the suspected causes: an empty text block, an empty or whitespace
+string, and a 40-way tool fan-out are all accepted; only a conversation with no
+user message at all is rejected. A simulation driving the real `AgentLoop`
+collapsed to the observed three-message request at every context budget with
+the anchor still present, so a non-empty prompt could not produce it. These
+changes make the next occurrence legible; they do not claim to explain that one.
+Requested by `conductor`, who asked for (1) in exactly those terms.
+
+## [1.4.3] — 2026-09-22
+
+### Added
+- **Every request records its shape under `--debug`.** Roles and block types
+  per request, plus the task length at the start of a turn — no content, so it
+  is safe on every request rather than only on the ones the anchor guard
+  complains about. Two of Conductor's 400s left nothing to diagnose because
+  the shape line was written only when the guard re-anchored; when the guard
+  stays quiet and Ava rejects the request anyway, the trail is now already
+  there. Requested by `conductor`.
+
+## [1.4.2] — 2026-09-22
+
+### Fixed
+- **An empty `--prompt` is refused instead of started.** A headless run with no
+  task cannot state what it is doing, and the task message is also the anchor
+  every request carries: an empty one is not one, so context management is free
+  to drop it and the run dies later on an Ava 400 rather than immediately, with
+  a reason. `--prompt ""` (and whitespace-only) now exits 2 and says so.
+
+## [1.4.1] — 2026-09-22
+
+### Fixed
+- **The anchor guard had one silent branch.** `_ensure_anchor` returned before
+  its warning whenever `_task_text` was empty, so a request that left with no
+  user text at all was never reported: no log line, no message to the user,
+  nothing in the `--debug` dump. Conductor lost two unattended runs to an Ava
+  400 whose only trace was Ava's own error. There is nothing to restore in that
+  case, but it is now logged, dumped and reported like every other route
+  through the guard. Reported by `conductor`, who also asked for exactly this.
+
 ## [1.4.0] — 2026-09-21
 
 Minor release: a headless run keeps its task, or says so. 1.2.0 stopped

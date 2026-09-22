@@ -133,3 +133,26 @@ def test_image_payloads_are_not_dumped(tmp_path, monkeypatch):
     with capture_at(logging.DEBUG) as cap:
         loop.run_turn("the task", RecordingRenderer())
     assert "BASE64IMAGEDATA" not in cap.text()
+
+
+def test_a_taskless_conversation_is_reported_not_silent(tmp_path, monkeypatch):
+    """No anchor and no task to restore: the one branch that said nothing.
+
+    Conductor lost two unattended runs to an Ava 400 whose only trace was Ava's
+    own error: `_ensure_anchor` returned before its warning whenever
+    `_task_text` was empty, so neither the log nor the user heard about it.
+    Nothing can be restored in that case, but it must still be reported.
+    """
+    client = Recorder()
+    loop = _loop(tmp_path, client)
+    monkeypatch.setattr(loop, "_fit", lambda: [
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t0", "content": "r"}]},
+    ])
+    renderer = RecordingRenderer()
+    with capture_at(logging.WARNING) as cap:
+        loop.run_turn("", renderer)
+    assert "no user text" in cap.text()
+    assert "no task" in cap.text()
+    assert any(e[0] == "info" and "task" in e[1].lower() for e in renderer.events), \
+        renderer.events
