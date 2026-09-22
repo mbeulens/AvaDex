@@ -148,6 +148,13 @@ class AgentLoop:
         Under require_private a response that isn't explicitly private stops
         the run here, before any of its tool calls execute or another request
         is sent."""
+        if log.isEnabledFor(logging.DEBUG):
+            # Roles and block types only, no content — so this is safe on every
+            # request, not just the ones the anchor guard complains about. A
+            # request Ava rejects is then already in the trail.
+            msgs = kwargs.get("messages") or []
+            log.debug("request shape: %s",
+                      [(m.get("role"), _block_types(m)) for m in msgs])
         with Spinner():
             response = self.client.messages(**kwargs)
         self.usage.record(response)
@@ -229,6 +236,9 @@ class AgentLoop:
                   json.dumps(stripped, ensure_ascii=False, default=str))
 
     def run_turn(self, user_text: str, renderer: Renderer) -> None:
+        # Length, not the text: enough to tell a taskless run from a real one
+        # without putting the task in the log.
+        log.debug("run_turn: task %d chars", len(user_text))
         self._task_text = user_text
         self.messages.append({"role": "user", "content": user_text})
         recent_signatures: list[str] = []

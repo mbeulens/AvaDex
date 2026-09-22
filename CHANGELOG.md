@@ -3,6 +3,17 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] — 2026-09-22
+
+### Added
+- **Every request records its shape under `--debug`.** Roles and block types
+  per request, plus the task length at the start of a turn — no content, so it
+  is safe on every request rather than only on the ones the anchor guard
+  complains about. Two of Conductor's 400s left nothing to diagnose because
+  the shape line was written only when the guard re-anchored; when the guard
+  stays quiet and Ava rejects the request anyway, the trail is now already
+  there. Requested by `conductor`.
+
 ## [1.4.2] — 2026-09-22
 
 ### Fixed
