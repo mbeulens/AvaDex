@@ -11,7 +11,11 @@ can't proceed honestly fails rather than finishing quietly: a model that
 writes a tool call out as text instead of calling it exits 1, and context
 trimming always keeps the task. Since 1.4, if the task is ever missing
 anyway, AvaDex restores it, tells you, and records the conversation under
-`--debug`.
+`--debug`. Since 1.5 a run with no task cannot start at all (`--prompt ""`
+exits 2), the one case that could not be restored is reported rather than
+passed over in silence, and `--debug` records the shape of every request —
+roles and block types, no content — so a rejected request is already in the
+trail.
 
 ## Install
 
