@@ -195,22 +195,38 @@ class AgentLoop:
         Ava rejects such a request outright (qwen3.8: "requires at least one
         user message with text"), and any model would have lost the task.
         Context management is supposed to keep it, so reaching here is a bug:
-        say so, restore the task and carry on rather than failing the run."""
-        if _anchor_index(messages) is not None or not self._task_text:
+        say so, restore the task and carry on rather than failing the run.
+
+        With no task to put back there is nothing to restore, but that is the
+        case that cost Conductor two unattended runs with no trace but Ava's
+        own error — so it is reported too, rather than returning in silence."""
+        if _anchor_index(messages) is not None:
             return messages
         shape = [(m.get("role"), _block_types(m)) for m in messages]
+        if not self._task_text:
+            log.warning("no user text in %d messages and no task to restore: %s",
+                        len(messages), shape)
+            self._dump_conversation(messages)
+            renderer.info("this run has no task message and none is left in the "
+                          "conversation — Ava may reject the request "
+                          "(please report; run with --debug for the message dump)")
+            return messages
         log.warning("no user text in %d messages, re-anchoring with the task: %s",
                     len(messages), shape)
-        if log.isEnabledFor(logging.DEBUG):
-            # --debug only, and --debug writes to the user's own machine:
-            # the full conversation, minus image payloads, is what makes this
-            # diagnosable. Without --debug only the shape above is recorded.
-            stripped, _ = _strip_image_payloads(messages)
-            log.debug("re-anchor: full messages %s",
-                      json.dumps(stripped, ensure_ascii=False, default=str))
+        self._dump_conversation(messages)
         renderer.info("context management lost the task message — restoring it "
                       "(please report; run with --debug for the message dump)")
         return [{"role": "user", "content": self._task_text}] + messages
+
+    def _dump_conversation(self, messages: list[dict]) -> None:
+        """--debug only, and --debug writes to the user's own machine: the full
+        conversation, minus image payloads, is what makes this diagnosable.
+        Without --debug only the shape line is recorded."""
+        if not log.isEnabledFor(logging.DEBUG):
+            return
+        stripped, _ = _strip_image_payloads(messages)
+        log.debug("re-anchor: full messages %s",
+                  json.dumps(stripped, ensure_ascii=False, default=str))
 
     def run_turn(self, user_text: str, renderer: Renderer) -> None:
         self._task_text = user_text

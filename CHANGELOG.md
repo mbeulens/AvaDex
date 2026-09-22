@@ -3,6 +3,17 @@
 All notable changes to AvaDex are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] — 2026-09-22
+
+### Fixed
+- **The anchor guard had one silent branch.** `_ensure_anchor` returned before
+  its warning whenever `_task_text` was empty, so a request that left with no
+  user text at all was never reported: no log line, no message to the user,
+  nothing in the `--debug` dump. Conductor lost two unattended runs to an Ava
+  400 whose only trace was Ava's own error. There is nothing to restore in that
+  case, but it is now logged, dumped and reported like every other route
+  through the guard. Reported by `conductor`, who also asked for exactly this.
+
 ## [1.4.0] — 2026-09-21
 
 Minor release: a headless run keeps its task, or says so. 1.2.0 stopped
